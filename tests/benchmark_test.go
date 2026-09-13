@@ -1,0 +1,330 @@
+package tests
+
+import (
+	"runtime"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/patrickbrandao/go-loghub-uuidv7"
+)
+
+var g = uuidv7.NewGenerator()
+
+// sink evita que o compilador elimine as gerações nos benchmarks.
+var sinkU uuidv7.UUID
+var sinkS string
+
+func BenchmarkGenerateLevel1(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = g.Generate(uuidv7.Level1)
+	}
+}
+
+func BenchmarkGenerateLevel2(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = g.Generate(uuidv7.Level2)
+	}
+}
+
+func BenchmarkGenerateLevel3(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = g.Generate(uuidv7.Level3)
+	}
+}
+
+func BenchmarkGenerateStringLevel1(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkS = g.GenerateString(uuidv7.Level1)
+	}
+}
+
+func BenchmarkGenerateStringLevel3(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkS = g.GenerateString(uuidv7.Level3)
+	}
+}
+
+// BenchmarkGenerateLevel3Parallel mede o throughput com várias
+// goroutines, simulando "centenas de threads" usando o mesmo Generator.
+func BenchmarkGenerateLevel3Parallel(b *testing.B) {
+	b.ReportAllocs()
+	b.RunParallel(func(pb *testing.PB) {
+		var u uuidv7.UUID
+		for pb.Next() {
+			u = g.Generate(uuidv7.Level3)
+		}
+		// Mantém o valor vivo sem escrever no sink global: publicar em
+		// sinkU a partir de várias goroutines é uma corrida de dados.
+		runtime.KeepAlive(u)
+	})
+}
+
+// BenchmarkString mede a serialização canônica de um UUID já pronto. É a
+// referência contra a qual BenchmarkAppendTo deve ser lido: as duas
+// produzem os mesmos 36 bytes, mas String aloca a string devolvida.
+func BenchmarkString(b *testing.B) {
+	u := uuidv7.Generate(uuidv7.Level3)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sinkS = u.String()
+	}
+}
+
+// BenchmarkAppendTo mede a mesma serialização escrita no buffer do
+// chamador, sem a alocação da string.
+func BenchmarkAppendTo(b *testing.B) {
+	u := uuidv7.Generate(uuidv7.Level3)
+	buf := make([]byte, 0, 64)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf = u.AppendTo(buf[:0])
+	}
+	runtime.KeepAlive(buf)
+}
+
+// BenchmarkFromString mede o caminho de análise da string canônica —
+// o único que recebe dado externo, e por isso o que mais importa manter
+// rápido e sem alocações.
+func BenchmarkFromString(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU, _ = uuidv7.FromString(canonical)
+	}
+}
+
+// BenchmarkImportBinary mede a extração das propriedades de tempo.
+func BenchmarkImportBinary(b *testing.B) {
+	u := uuidv7.Generate(uuidv7.Level3)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sinkT, sinkErr = uuidv7.ImportBinary(u)
+	}
+}
+
+// BenchmarkImport mede a leitura de tempo a partir da string canônica.
+func BenchmarkImport(b *testing.B) {
+	s := uuidv7.GenerateString(uuidv7.Level3)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sinkT, sinkErr = uuidv7.Import(s)
+	}
+}
+
+// BenchmarkTimestampWithLevel3 mede a leitura por nível, que devolve o
+// instante como time.Time.
+func BenchmarkTimestampWithLevel3(b *testing.B) {
+	u := uuidv7.Generate(uuidv7.Level3)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		sinkTime, sinkOK = u.TimestampWithLevel(uuidv7.Level3)
+	}
+}
+
+// TestMassOneMillion gera 1.000.000 de UUIDs de cada nível (binário e
+// string) e imprime o tempo consumido e o throughput. Rode com:
+//
+//	go test ./tests/ -run TestMassOneMillion -v
+func TestMassOneMillion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("pulado em modo -short")
+	}
+	const total = 1_000_000
+	gen := uuidv7.NewGenerator()
+
+	// Passagem de aquecimento: sem ela o primeiro cenário medido paga
+	// sozinho o custo de aquecer cache de instruções e frequência de CPU,
+	// e aparece artificialmente mais lento que os demais.
+	for i := 0; i < 100_000; i++ {
+		sinkU = gen.Generate(uuidv7.Level1)
+		sinkU = gen.Generate(uuidv7.Level3)
+		sinkS = gen.GenerateString(uuidv7.Level3)
+	}
+
+	measure := func(name string, fn func()) {
+		start := time.Now()
+		fn()
+		dur := time.Since(start)
+		perUUID := dur / total
+		// Taxa a partir de nanossegundos: dur.Milliseconds()+1 arredonda
+		// para baixo e ainda soma 1 ms, distorcendo execuções curtas.
+		perMs := float64(total) / (float64(dur.Nanoseconds()) / 1e6)
+		t.Logf("%-26s %10d UUIDs em %12v  (%8v/UUID, ~%.0f UUIDs/ms)",
+			name, total, dur, perUUID, perMs)
+	}
+
+	measure("Nível 1 binário", func() {
+		for i := 0; i < total; i++ {
+			sinkU = gen.Generate(uuidv7.Level1)
+		}
+	})
+	measure("Nível 2 binário", func() {
+		for i := 0; i < total; i++ {
+			sinkU = gen.Generate(uuidv7.Level2)
+		}
+	})
+	measure("Nível 3 binário", func() {
+		for i := 0; i < total; i++ {
+			sinkU = gen.Generate(uuidv7.Level3)
+		}
+	})
+	measure("Nível 1 string", func() {
+		for i := 0; i < total; i++ {
+			sinkS = gen.GenerateString(uuidv7.Level1)
+		}
+	})
+	measure("Nível 3 string", func() {
+		for i := 0; i < total; i++ {
+			sinkS = gen.GenerateString(uuidv7.Level3)
+		}
+	})
+}
+
+// TestMassConcurrent gera 1.000.000 de UUIDs de nível 3 distribuídos
+// entre muitas goroutines, confirmando segurança e medindo throughput
+// agregado.
+func TestMassConcurrent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("pulado em modo -short")
+	}
+	const total = 1_000_000
+	const goroutines = 256
+	gen := uuidv7.NewGenerator()
+
+	perGoroutine := total / goroutines
+	// Cada goroutine publica em sua própria posição: escrever todas no
+	// mesmo sink global é uma corrida de dados acusada por -race.
+	last := make([]uuidv7.UUID, goroutines)
+	var wg sync.WaitGroup
+	start := time.Now()
+	for w := 0; w < goroutines; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			var u uuidv7.UUID
+			for i := 0; i < perGoroutine; i++ {
+				u = gen.Generate(uuidv7.Level3)
+			}
+			last[w] = u
+		}(w)
+	}
+	wg.Wait()
+	dur := time.Since(start)
+	sinkU = last[goroutines-1]
+	t.Logf("concorrente: %d UUIDs em %d goroutines = %v (~%.0f UUIDs/ms)",
+		goroutines*perGoroutine, goroutines, dur,
+		float64(goroutines*perGoroutine)/(float64(dur.Nanoseconds())/1e6))
+}
+
+// BenchmarkGenerateV7 mede o nome por versão do UUIDv7. Deve custar o
+// mesmo que BenchmarkGenerateLevel1: é um apelido de Generate(Level1)
+// que o compilador embute, não um caminho próprio.
+func BenchmarkGenerateV7(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = g.GenerateV7()
+	}
+}
+
+// BenchmarkGenerateV7Level1, BenchmarkGenerateV7Level2 e
+// BenchmarkGenerateV7Level3 medem os nomes por nível. Cada um deve custar
+// o mesmo que BenchmarkGenerateLevel1, 2 e 3, respectivamente, pelo mesmo
+// motivo: são apelidos de Generate no nível, embutidos pelo compilador.
+
+func BenchmarkGenerateV7Level1(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = g.GenerateV7Level1()
+	}
+}
+
+func BenchmarkGenerateV7Level2(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = g.GenerateV7Level2()
+	}
+}
+
+func BenchmarkGenerateV7Level3(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = g.GenerateV7Level3()
+	}
+}
+
+// BenchmarkParse mede o analisador permissivo no formato canônico.
+func BenchmarkParse(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU, _ = uuidv7.Parse(canonical)
+	}
+}
+
+// --- fronteiras de tempo ---
+
+// benchInstant é um instante fixo: o custo das fronteiras não deve
+// depender do relógio, e medir com um valor constante evita somar a
+// leitura de time.Now ao resultado.
+var benchInstant = time.Date(2026, 9, 11, 12, 34, 56, 123_456_789, time.UTC)
+
+func BenchmarkMinAtLevel1(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = uuidv7.MinAt(uuidv7.Level1, benchInstant)
+	}
+}
+
+func BenchmarkMinAtLevel3(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = uuidv7.MinAt(uuidv7.Level3, benchInstant)
+	}
+}
+
+func BenchmarkMaxAtLevel3(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = uuidv7.MaxAt(uuidv7.Level3, benchInstant)
+	}
+}
+
+func BenchmarkRangeAtLevel3(b *testing.B) {
+	fim := benchInstant.Add(time.Hour)
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU, sinkU = uuidv7.RangeAt(uuidv7.Level3, benchInstant, fim)
+	}
+}
+
+// --- geração a partir de instante explícito ---
+
+func BenchmarkGenerateAtLevel1(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = g.GenerateAt(uuidv7.Level1, benchInstant)
+	}
+}
+
+func BenchmarkGenerateAtLevel3(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkU = g.GenerateAt(uuidv7.Level3, benchInstant)
+	}
+}
+
+func BenchmarkGenerateAtStringLevel3(b *testing.B) {
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		sinkS = g.GenerateAtString(uuidv7.Level3, benchInstant)
+	}
+}

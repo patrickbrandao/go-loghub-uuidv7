@@ -1,0 +1,249 @@
+package uuidv7_test
+
+// Este é o único arquivo de exemplos da biblioteca e fica na raiz de
+// propósito: o godoc só associa funções Example ao pacote documentado
+// quando elas vivem no mesmo diretório, no próprio pacote ou no seu pacote
+// externo de teste. Como ./tests/ é outro pacote, exemplos lá não
+// apareceriam em pkg.go.dev. O pacote é uuidv7_test, então o arquivo
+// importa a biblioteca pelo caminho do módulo, como um consumidor faria, e
+// não tem acesso a nada interno.
+//
+// Cada exemplo reproduz um trecho de README.md, docs/DEPLOY-FAST.md ou
+// docs/DEPLOY-FULL.md, para que a documentação seja compilada e executada
+// pela suíte. Os exemplos com saída verificável (comentário "Output:")
+// usam apenas valores fixos; os que dependem do relógio ou de
+// aleatoriedade não declaram saída e servem só para compilar o uso.
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/patrickbrandao/go-loghub-uuidv7"
+)
+
+// A forma mais curta: as funções de pacote usam um gerador padrão
+// interno, já pronto e seguro para concorrência.
+func ExampleGenerateString() {
+	s1 := uuidv7.GenerateString(uuidv7.Level1) // só milissegundos (UUIDv7 padrão)
+	s2 := uuidv7.GenerateString(uuidv7.Level2) // até microssegundos (rand_a)
+	s3 := uuidv7.GenerateString(uuidv7.Level3) // até nanossegundos (rand_a + rand_b)
+	fmt.Println(len(s1), len(s2), len(s3))
+	// Output: 36 36 36
+}
+
+// Em serviços de alto volume, crie um único Generator no boot e
+// reutilize-o em todas as goroutines.
+func ExampleGenerator_Generate() {
+	gen := uuidv7.NewGenerator()
+
+	u := gen.Generate(uuidv7.Level3) // u é um uuidv7.UUID ([16]byte)
+	fmt.Println(u.Version(), u.Variant())
+	// Output: 7 2
+}
+
+// GenerateV7 é o UUIDv7 padrão da RFC 9562 pelo nome da versão, sem a
+// extensão de precisão: exatamente Generate(Level1), com precisão de
+// milissegundo. Existe também como método do Generator.
+func ExampleGenerateV7() {
+	u := uuidv7.GenerateV7()
+	fmt.Println(u.Version(), u.Variant())
+	// Output: 7 2
+}
+
+// GenerateV7Level1, GenerateV7Level2 e GenerateV7Level3 são os três níveis
+// pelo nome, sem o argumento de nível: cada um é exatamente Generate com
+// o nível correspondente, e GenerateV7Level1 é o mesmo que GenerateV7.
+// Existem também como métodos do Generator.
+func ExampleGenerateV7Level3() {
+	u := uuidv7.GenerateV7Level3() // milissegundos, microssegundos e nanossegundos embutidos
+	fmt.Println(u.Version(), u.Variant())
+	// Output: 7 2
+}
+
+// FromString aceita apenas a forma canônica 8-4-4-4-12, em maiúsculas ou
+// minúsculas, e devolve ErrInvalidFormat para qualquer outra coisa.
+func ExampleFromString() {
+	u, err := uuidv7.FromString("0192F7C5-1A2B-7C3D-8E4F-AABBCCDDEEFF")
+	if err != nil {
+		fmt.Println("erro:", err)
+		return
+	}
+	fmt.Println(u.String())
+
+	_, err = uuidv7.FromString("0192f7c51a2b7c3d8e4faabbccddeeff")
+	fmt.Println(err == uuidv7.ErrInvalidFormat) //nolint:errorlint // FromString devolve o sentinela puro; a comparação direta faz parte do contrato
+	// Output:
+	// 0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff
+	// true
+}
+
+// ImportBinary lê os campos de tempo de um UUIDv7. A leitura é cega
+// quanto ao nível: rand_a é sempre interpretado como microssegundos e o
+// topo de rand_b como nanossegundos, mesmo que o UUID seja de Nível 1 e
+// esses bits sejam aleatórios.
+func ExampleImportBinary() {
+	// UUIDv7 de Nível 3 montado à mão: 0x0192f7c51a2b ms desde a época,
+	// 0x1c3 = 451 microssegundos em rand_a e 0x393 = 915 nanossegundos
+	// nos 10 bits altos de rand_b.
+	u := uuidv7.MustParse("0192f7c5-1a2b-71c3-b930-0000aabbccdd")
+
+	t, err := uuidv7.ImportBinary(u)
+	if err != nil {
+		fmt.Println("erro:", err)
+		return
+	}
+	fmt.Printf("seg=%d ms=%03d us=%03d ns=%03d\n",
+		t.Seconds, t.Milliseconds, t.Microseconds, t.Nanoseconds)
+	// Output: seg=1730733742 ms=635 us=451 ns=915
+}
+
+// Import lê os campos de tempo a partir da string canônica e recusa, com
+// ErrNotV7, um UUID bem formado de outra versão: um UUIDv4 não carrega
+// instante, e lê-lo como UUIDv7 devolveria uma data sem sentido.
+func ExampleImport() {
+	t, err := uuidv7.Import("017f22e2-79b0-7cc3-98c4-dc0c0c07398f") // exemplo de UUIDv7 da RFC 9562
+	fmt.Println(t.Seconds, t.Milliseconds, err)
+
+	_, err = uuidv7.Import("919108f7-52d1-4320-9bac-f847db4148a8") // exemplo de UUIDv4 da RFC 9562
+	fmt.Println(errors.Is(err, uuidv7.ErrNotV7))
+	// Output:
+	// 1645557742 0 <nil>
+	// true
+}
+
+// Parse aceita as quatro formas usuais de escrever um UUID; todas
+// produzem o mesmo valor.
+func ExampleParse() {
+	inputs := []string{
+		"0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff",
+		"{0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff}",
+		"urn:uuid:0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff",
+		"0192f7c51a2b7c3d8e4faabbccddeeff",
+	}
+	for _, in := range inputs {
+		u, err := uuidv7.Parse(in)
+		if err != nil {
+			fmt.Println("erro:", err)
+			continue
+		}
+		fmt.Println(u)
+	}
+	// Output:
+	// 0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff
+	// 0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff
+	// 0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff
+	// 0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff
+}
+
+// TimestampWithLevel reconstrói o instante com a precisão do nível
+// informado. O nível não pode ser deduzido do UUID, por isso o chamador
+// precisa dizê-lo.
+func ExampleUUID_TimestampWithLevel() {
+	// O mesmo UUID de Nível 3 usado em ExampleImportBinary.
+	u := uuidv7.MustParse("0192f7c5-1a2b-71c3-b930-0000aabbccdd")
+
+	ms, _ := u.Timestamp() // só o milissegundo, como qualquer UUIDv7
+	l3, _ := u.TimestampWithLevel(uuidv7.Level3)
+
+	fmt.Println(ms.Format(time.RFC3339Nano))
+	fmt.Println(l3.Format(time.RFC3339Nano))
+	// Output:
+	// 2024-11-04T15:22:22.635Z
+	// 2024-11-04T15:22:22.635451915Z
+}
+
+// NullUUID representa uma coluna que aceita NULL e viaja em JSON como a
+// string canônica ou como null.
+func ExampleNullUUID() {
+	type Registro struct {
+		ID  uuidv7.UUID     `json:"id"`
+		Pai uuidv7.NullUUID `json:"pai"`
+	}
+
+	raiz := Registro{ID: uuidv7.MustParse("0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff")}
+	dados, _ := json.Marshal(raiz)
+	fmt.Println(string(dados))
+
+	var lido Registro
+	_ = json.Unmarshal([]byte(`{"id":"0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff","pai":"{0192F7C5-1A2B-7C3D-8E4F-AABBCCDDEEFF}"}`), &lido)
+	fmt.Println(lido.Pai.Valid, lido.Pai.UUID == lido.ID)
+	// Output:
+	// {"id":"0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff","pai":null}
+	// true true
+}
+
+// NewCryptoGenerator monta um gerador cuja entropia vem inteiramente de
+// crypto/rand, para identificadores que precisem ser inadivinháveis. O
+// gerador padrão é mais rápido, mas a recomendação para segredos continua
+// sendo crypto/rand.
+func ExampleNewCryptoGenerator() {
+	gen := uuidv7.NewCryptoGenerator()
+
+	u := gen.Generate(uuidv7.Level1)
+	fmt.Println(u.Version(), u.Variant())
+	// Output: 7 2
+}
+
+// MinAt e MaxAt devolvem o menor e o maior UUIDv7 que a biblioteca
+// poderia gerar em um instante, no nível informado. As duas preservam a
+// versão 7 e a variante RFC, e é isso que as torna limites corretos: a
+// fronteira superior do Nível 1 termina em 7fff-bfff, não em ffff-ffff.
+//
+// No Nível 2 o campo rand_a carrega os microssegundos do instante (456,
+// ou 0x1c8), então ele é igual nas duas fronteiras e só rand_b varia.
+func ExampleMinAt() {
+	instante := time.Date(2026, 9, 11, 12, 34, 56, 123_456_789, time.UTC)
+
+	fmt.Println(uuidv7.MinAt(uuidv7.Level1, instante))
+	fmt.Println(uuidv7.MaxAt(uuidv7.Level1, instante))
+	fmt.Println(uuidv7.MinAt(uuidv7.Level2, instante))
+	fmt.Println(uuidv7.MaxAt(uuidv7.Level2, instante))
+	// Output:
+	// 01a09076-bdfb-7000-8000-000000000000
+	// 01a09076-bdfb-7fff-bfff-ffffffffffff
+	// 01a09076-bdfb-71c8-8000-000000000000
+	// 01a09076-bdfb-71c8-bfff-ffffffffffff
+}
+
+// RangeAt devolve as duas fronteiras de um intervalo semiaberto, prontas
+// para consultar por faixa usando o índice da própria chave primária:
+//
+//	SELECT * FROM eventos WHERE id >= $1 AND id < $2 ORDER BY id
+//
+// A fronteira só vale para identificadores gravados no mesmo nível: os
+// bits abaixo do milissegundo significam coisas diferentes em cada um.
+func ExampleRangeAt() {
+	inicio := time.Date(2026, 9, 11, 12, 34, 56, 123_456_789, time.UTC)
+	fim := inicio.Add(time.Millisecond)
+
+	lo, hi := uuidv7.RangeAt(uuidv7.Level2, inicio, fim)
+	fmt.Println(lo)
+	fmt.Println(hi)
+	// Output:
+	// 01a09076-bdfb-71c8-8000-000000000000
+	// 01a09076-bdfc-71c8-8000-000000000000
+}
+
+// GenerateAt constrói um UUIDv7 para um instante que você informa, em
+// vez do instante atual. É o sentido inverso de Import, e serve para
+// reprocessar histórico preservando a ordenação cronológica da chave.
+//
+// Os bits livres são sorteados: com o gerador padrão, duas chamadas com
+// o mesmo instante devolvem valores diferentes. Aqui a entropia é fixa
+// em zero só para o exemplo ter saída verificável.
+func ExampleGenerateAt() {
+	quando := time.Date(2019, 3, 14, 10, 0, 0, 123_456_789, time.UTC)
+	gen := uuidv7.NewGeneratorWith(func() uint64 { return 0 })
+
+	u := gen.GenerateAt(uuidv7.Level3, quando)
+	fmt.Println(u)
+
+	// Os campos de tempo voltam exatos no Nível 3, que grava os três.
+	t, _ := uuidv7.ImportBinary(u)
+	fmt.Println(t.Seconds, t.Milliseconds, t.Microseconds, t.Nanoseconds)
+	// Output:
+	// 01697ba4-ed7b-71c8-b150-000000000000
+	// 1552557600 123 456 789
+}

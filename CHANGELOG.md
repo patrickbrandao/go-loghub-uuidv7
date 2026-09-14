@@ -26,6 +26,8 @@ deve ler a especificação primeiro. Decisão nova entra nos dois lugares.
 
 ## [Não publicado]
 
+## [v0.0.2] — 2026-09-14
+
 Nenhuma mudança no código de produção. Uma revisão em 2026-09-13 aplicou
 à suíte, que já tinha 100% de cobertura de instruções, uma campanha de
 mutação dirigida: de 45 defeitos injetados um por vez, em pontos
@@ -298,5 +300,6 @@ O histórico anterior à criação deste projeto — da `v0.1.0` à `v0.6.0` de
 fronteiras, à geração por instante, à política de entropia e às travas de
 alocação — está no `CHANGELOG.md` daquele repositório.
 
-[Não publicado]: https://github.com/patrickbrandao/go-loghub-uuidv7/compare/v0.0.1...HEAD
+[Não publicado]: https://github.com/patrickbrandao/go-loghub-uuidv7/compare/v0.0.2...HEAD
+[v0.0.2]: https://github.com/patrickbrandao/go-loghub-uuidv7/compare/v0.0.1...v0.0.2
 [v0.0.1]: https://github.com/patrickbrandao/go-loghub-uuidv7/releases/tag/v0.0.1

@@ -127,7 +127,7 @@ module uuid-test
 
 go 1.22
 
-require github.com/patrickbrandao/go-loghub-uuidv7 v0.0.1
+require github.com/patrickbrandao/go-loghub-uuidv7 v0.0.2
 ```
 
 > O `require` acima é preenchido automaticamente pelo `go get` mostrado

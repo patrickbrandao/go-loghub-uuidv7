@@ -12,10 +12,25 @@ import (
 )
 
 func TestSplitUnixInstantFloorsPreEpoch(t *testing.T) {
-	// 1969-12-31T23:59:59.5Z: Unix() devolve -1 e Nanosecond() 500_000_000.
-	ms, micro, nano := splitUnixInstant(-1, 500_000_000)
-	if ms != 0 || micro != 0 || nano != 0 {
-		t.Fatalf("pré-época: ms=%d micro=%d nano=%d, esperado 0/0/0", ms, micro, nano)
+	cases := []struct {
+		name      string
+		sec, nsec int64
+	}{
+		// 1969-12-31T23:59:59.5Z: Unix() devolve -1 e Nanosecond() 500_000_000.
+		{"meio do último segundo antes da época", -1, 500_000_000},
+		// 1969-12-31T23:59:59.999999999Z: o carimbo em milissegundos vale
+		// exatamente -1, a borda do piso. Um piso escrito como ms < -1 passa no
+		// caso anterior e falha só aqui, com micro e nano em 999.
+		{"último nanossegundo antes da época", -1, 999_999_999},
+		{"início do último segundo antes da época", -1, 0},
+		// O valor zero de time.Time: ano 1, muito antes da época.
+		{"valor zero de time.Time", -62_135_596_800, 0},
+	}
+	for _, c := range cases {
+		ms, micro, nano := splitUnixInstant(c.sec, c.nsec)
+		if ms != 0 || micro != 0 || nano != 0 {
+			t.Errorf("pré-época, %s: ms=%d micro=%d nano=%d, esperado 0/0/0", c.name, ms, micro, nano)
+		}
 	}
 }
 

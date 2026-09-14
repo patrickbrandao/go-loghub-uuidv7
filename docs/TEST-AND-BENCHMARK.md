@@ -24,13 +24,31 @@ RFC 9562 (apêndice A.6), o descarte por faixa da leitura por nível, a
 recusa das outras versões nas 64 combinações de versão e variante e nos
 exemplos da RFC das versões 1, 3, 4, 5, 6 e 8, as fronteiras e a geração
 por instante, a análise permissiva de texto nos quatro formatos, a
-serialização em JSON e binário e a integração com `database/sql`.
+serialização em JSON, binário e `encoding/gob` e a integração com
+`database/sql`.
+
+E cobrem o que a cobertura de instruções não prova: de onde cada campo
+livre tira os bits (`tests/entropy_test.go`), o nível de cada forma de
+gerar, inclusive as funções de pacote, pela assinatura estatística dos
+bits livres (`TestEveryGenerationFormWritesItsLevel`), a aceitação exata
+das 36 x 256 mutações de um byte nas quatro formas de texto, com um
+decodificador independente como oráculo, e os valores exatos no teto de
+48 bits, onde a saturação começa. Uma campanha de mutação feita em
+2026-09-13 mostrou que, com 100% de cobertura, 34 de 45 defeitos
+injetados passavam pela suíte; esses testes foram escritos para pegá-los.
+
+Nenhum teste de `./tests/` pode usar `t.Parallel`:
+`TestCryptoGeneratorReadsCryptoRandReader` troca `crypto/rand.Reader`
+durante a construção do gerador, e um teste paralelo que lesse a mesma
+variável seria corrida de dados. `TestSuiteHasNoParallelTests` confere os
+arquivos de teste do pacote e falha se algum chamar `Parallel`.
 
 Para rodar apenas um desses grupos:
 
 ```bash
 go test ./tests/ -run 'TestTimestamp|TestTimeReading|TestRFC9562|TestImport' -v  # leitura de tempo
 go test ./tests/ -run 'TestParse|TestJSON|TestSQL|TestNull|TestErrorTaxonomy' -v  # API de apoio
+go test ./tests/ -run 'Entropy|Reader|Crypto|TextForms|EveryGenerationForm' -v    # fiação da entropia e níveis
 ```
 
 Modo rápido (pula os testes de massa de 1 milhão):
@@ -68,7 +86,7 @@ aleatórios lidos como instante.
 # Fuzz do analisador estrito
 go test ./tests/ -run '^$' -fuzz FuzzFromString -fuzztime 60s
 
-# Fuzz do analisador permissivo (quatro formatos)
+# Fuzz do analisador permissivo (quatro formatos; toda entrada aceita tem de ser uma das quatro formas do valor)
 go test ./tests/ -run '^$' -fuzz FuzzParse -fuzztime 60s
 
 # Fuzz do leitor de JSON de NullUUID (concordância com o tipo UUID)

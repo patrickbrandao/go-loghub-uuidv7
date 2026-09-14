@@ -134,6 +134,17 @@ garantindo ordenação temporal natural por comparação byte a byte.
 | `var`         | 2 bits  | 64–65          | 8 (alto)| `0b10`               | `0b10`                 | `0b10`                 |
 | `rand_b`      | 62 bits | 66–127         | 8(b)..15| aleatório (62 bits)  | aleatório (62 bits)    | 10b ns (0..999) + 52b  |
 
+**Codificação decimal, e não a do Método 3 da RFC.** Os microssegundos e
+os nanossegundos são contagens decimais de 0 a 999, gravadas em binário
+nos seus campos, e **não** a fração do milissegundo multiplicada por 4096
+que o Método 3 da RFC 9562 §6.2 descreve. O resultado continua sendo um
+UUIDv7 válido e cronologicamente ordenável, mas um leitor de terceiros que
+siga o Método 3 interpreta errado o sub-milissegundo (456 µs viram cerca
+de 111 µs), e o Nível 3 usa 22 bits de tempo, além dos 12 que o método
+prevê. A codificação decimal é o que permite à leitura por nível
+reconhecer ruído pela faixa (seção 7). A escolha é deliberada e está
+registrada na seção 11.3.
+
 **Nome por versão e nome por nível.** O Nível 1 **DEVE** existir também
 sob o nome da versão (`GenerateV7`), e cada um dos três
 níveis **DEVE** existir sob um nome que diga o nível (`GenerateV7Level1`,
@@ -223,6 +234,17 @@ nanossegundos deve obedecer a regras estritas de robustez:
   (`r1` e `r2`)**, usando os 12 bits inferiores de `r1` para preencher
   `rand_a`.
 - Essa economia é normativa e deve ser travada por testes de contagem.
+- **A correspondência entre palavras e campos também é normativa.** No
+  Nível 1, `r1` é a **primeira** palavra sorteada e `r2` a segunda, e
+  `rand_b` recebe os 62 bits inferiores de `r2`. Nos níveis 2 e 3, a
+  única palavra sorteada é `r2`: `rand_b` recebe os seus 62 bits
+  inferiores no Nível 2 e os 52 inferiores no Nível 3. O teste **DEVE**
+  usar palavras distintas, porque uma fonte constante não distingue `r1`
+  de `r2`. No gerador padrão, cuja fonte não é injetável, a independência
+  das duas palavras **DEVE** ser conferida estatisticamente: uma palavra
+  repetida faria `rand_a` coincidir sempre com os 12 bits inferiores de
+  `rand_b` e derrubaria o Nível 1 de 74 para 62 bits de entropia, sem
+  nenhum sinal visível (seção 10, caso 4).
 
 ### 3.4 Ordenação e Desempate (Sem Contador Monotônico)
 
@@ -317,6 +339,21 @@ Truncar os bits excedentes, como o empacotamento por deslocamento faria
 naturalmente, é **proibido**: a fronteira daria a volta e a consulta
 passaria a devolver as linhas erradas em silêncio. A propriedade a
 preservar é que a fronteira nunca regride quando o instante avança.
+
+**Divergência consciente da RFC.** A RFC 9562 §6.1 manda, ao truncar um
+carimbo, manter os bits **menos** significativos, o que faz um instante
+posterior a 10889 dar a volta para perto de 1970. A construção a partir
+de um instante diverge dessa regra de propósito, pelo motivo acima; a
+geração pelo relógio conserva o truncamento natural do empacotamento,
+que nunca é alcançado antes daquele ano. Ver a seção 11.3.
+
+A saturação entra **exatamente** no primeiro instante acima da faixa, nem
+um segundo nem um milissegundo antes: em `10889-08-02T05:31:50Z` o
+carimbo ainda é `0xfffffffffd70`, e em
+`10889-08-02T05:31:50.655456789Z` os campos abaixo do milissegundo ainda
+são os do instante. Saturar cedo demais preserva a ordem e passa por
+qualquer teste que só confira monotonicidade, por isso os valores exatos
+dessa borda estão no caso 10 da seção 10.
 
 **Cuidado de implementação.** É aqui que a regra 3 da seção 3.2 passa a
 valer: como o instante vem por parâmetro e não do relógio do sistema, ele
@@ -513,6 +550,21 @@ o gerador recebe um resultado correto. Ver a seção 11.3.
   secretos), a biblioteca deve fornecer um gerador explícito que utiliza
   exclusivamente entropia criptográfica (`NewCryptoGenerator`), e um
   construtor sobre um leitor do chamador (`NewGeneratorWithReader`).
+- **Regra normativa — formação das palavras a partir do leitor.** Cada
+  palavra de 64 bits é formada por **8 bytes em ordem de rede**
+  (*big-endian*, o primeiro byte lido é o mais significativo), e as
+  palavras são lidas na ordem da seção 3.3: no Nível 1, os 8 primeiros
+  bytes formam `r1` e os 8 seguintes, `r2`. Uma leitura **curta** sem
+  erro, que o contrato de leitor da linguagem permite, **DEVE** ser
+  completada com novas leituras até os 8 bytes; só o fim dos dados ou um
+  erro contam como falha, e aí vale o caso 1 da seção 5.2. Aceitar a
+  leitura pela metade deixaria bytes zerados na palavra, em silêncio. A
+  ordem é contrato porque é visível ao chamador: um leitor determinístico
+  reproduz os mesmos identificadores (seção 11.1).
+- O gerador criptográfico **DEVE** ler da fonte criptográfica do sistema
+  capturada na construção, e o teste **DEVE** provar a origem dos bits, e
+  não só a validade do resultado: um gerador "criptográfico" que caísse
+  na fonte padrão produziria UUIDv7 igualmente válidos (seção 10, caso 4).
 - Mesmo com entropia criptográfica, todo UUIDv7 expõe o instante de
   criação por construção. A documentação **DEVE** dizer isso junto do
   gerador criptográfico.
@@ -881,10 +933,45 @@ reais:
      Conferir também cada campo: `rand_a` em `0xfff` no Nível 1 e em
      0..999 nos demais; topo de `rand_b` em `0x3ff` nos níveis 1 e 2 e
      em 0..999 no Nível 3.
+   - Validar o nível de **todas** as formas de gerar, inclusive as
+     funções de pacote, que usam o gerador padrão e não aceitam fonte
+     injetada: a geração por nível, em binário e em texto, pelo relógio e
+     por instante, nos três níveis e em níveis desconhecidos (que devem
+     se comportar como o Nível 1), e os quatro nomes. Sem fonte
+     injetável, a prova é a assinatura estatística dos bits livres, que
+     decorre da seção 3.1: no Nível 1, `rand_a` passa de 999 em 3096 de
+     cada 4096 amostras, e nos níveis 2 e 3 nunca passa; no Nível 2, o
+     topo de `rand_b` passa de 999 em 24 de cada 1024, e no Nível 3 nunca
+     passa. Com 4.000 amostras por forma, confundir o Nível 2 com o 3 tem
+     probabilidade abaixo de 10^-41. Sem este caso, uma função de pacote
+     que ignorasse o nível pedido produziria UUIDv7 válidos e distintos,
+     e passaria por todos os outros.
+   - Validar que a leitura do nibble de versão e do código de variante
+     devolve o valor dos bits para **qualquer** valor (versão de 0 a 15,
+     variante de 0 a 3), com os demais bits do byte em zero e em um, e
+     não só o `7` e o `0b10` dos identificadores gerados.
 2. **Robustez do Analisador contra Mutações**:
    - Executar teste cobrindo **todas as 36 × 256 mutações de um único byte**
      sobre uma string canônica válida: nenhuma mutação pode causar pânico.
-   - Submeter o analisador a campanhas de *fuzzing* contínuo.
+   - Sobre as mesmas mutações, exigir **aceitação exata**: o analisador
+     estrito aceita a mutação se, e somente se, ela mantém um dígito
+     hexadecimal numa posição de dígito ou o hífen numa posição de hífen,
+     e devolve o valor calculado por um decodificador independente da
+     implementação. Conferir só a ausência de pânico deixa passar um
+     analisador que aceite `G` ou `:` como dígito.
+   - Repetir a varredura, com o mesmo critério, nas **quatro formas** do
+     analisador permissivo (seção 6.3): canônica, entre chaves, URN e
+     hexadecimal cru. As chaves só aceitam a si mesmas; o prefixo URN
+     aceita as mesmas letras em qualquer caixa e só os dois-pontos. A ida
+     e volta pela forma canônica não substitui este caso: uma entrada
+     aceita indevidamente volta ao mesmo valor, e por isso o fuzzing que
+     só confere a ida e volta não percebe um hífen ou um dois-pontos que
+     deixaram de ser conferidos.
+   - Submeter o analisador a campanhas de *fuzzing* contínuo. No
+     analisador permissivo, o oráculo **DEVE** exigir que toda entrada
+     aceita seja, sem distinção de caixa, exatamente uma das quatro formas
+     escritas a partir do valor lido; a ida e volta sozinha não basta,
+     pelo motivo do item anterior.
    - **O fuzzing não para no texto.** A aritmética temporal **DEVE**
      receber campanhas próprias, e por um motivo diferente: no texto o
      risco é leitura fora dos limites, e aqui é saturação, estouro de
@@ -913,6 +1000,10 @@ reais:
      que uma transcrição da fórmula com conversão sem sinal antes da
      guarda (seção 3.2, item 2) transforma em carimbo enorme, e as duas
      formas de piso aceitas devem devolver a época.
+   - Testar também o último nanossegundo antes da época (`sec = -1`,
+     `nsec = 999.999.999`), em que `unix_ts_ms` vale exatamente `-1`: é a
+     borda do piso, e um piso escrito como `unix_ts_ms < -1` passa no
+     caso anterior e só falha aqui, com os campos sub-milissegundo em 999.
    - Testar instantes além do ano 2262 (ex.: ano 2300).
    - Validar viradas de segundo (`nsec = 999_999_999`) e viradas de
      milissegundo (`sub_ms = 999_999`).
@@ -922,6 +1013,26 @@ reais:
      consomem o mesmo que o nível que apelidam: `GenerateV7` e
      `GenerateV7Level1` consomem 2, `GenerateV7Level2` e
      `GenerateV7Level3` consomem 1.
+   - **Fiação das palavras** (seção 3.3): com uma fonte que devolva
+     palavras **distintas** em sequência, exigir, pelo relógio e por
+     instante, que no Nível 1 `rand_a` venha da primeira palavra e
+     `rand_b` da segunda, e que nos níveis 2 e 3 `rand_b` venha da única
+     palavra sorteada. A contagem não basta, e a entropia constante
+     também não: as duas passam com `rand_a` tirado da palavra errada.
+   - **Leitor do chamador** (seção 5.3): com um leitor que entregue um
+     byte por leitura, exigir os valores exatos que a ordem de rede e a
+     ordem `r1`, `r2` produzem, o consumo de exatamente 8 bytes por
+     palavra e o pânico com o erro de fonte quando os bytes acabam.
+   - **Formas em texto**: com entropia constante, exigir que a geração em
+     texto, pelo relógio e por instante, tenha os bits livres da fonte do
+     **próprio** gerador, e não os do gerador padrão.
+   - **Gerador criptográfico**: exigir que os bits venham da fonte
+     criptográfica capturada na construção. Em Go, a prova é trocar
+     `crypto/rand.Reader` por um leitor de bytes conhecidos só durante a
+     construção e exigir esses bytes no identificador gerado depois.
+   - **Gerador padrão**: exigir, em volume, que o Nível 1 sorteie duas
+     palavras independentes: `rand_a` coincide com os 12 bits inferiores
+     de `rand_b` em cerca de uma de cada 4096 amostras, e não em todas.
 5. **Vetor Externo da RFC 9562 (Apêndice A.6)**:
    - A RFC publica um único exemplo de UUIDv7, e ele é o único vetor de
      leitura de tempo calculado fora deste projeto:
@@ -991,6 +1102,25 @@ reais:
       devolve o instante de origem, truncado à resolução do nível.
     - Travar o layout com vetores fixos, calculados fora da
       implementação.
+    - Travar os **valores exatos na borda superior**, porque a
+      monotonicidade não mostra onde a saturação começa: saturar desde o
+      início do último segundo representável, ou já no último
+      milissegundo, preserva a ordem e passa pelos casos acima. A
+      fronteira inferior (bits livres em zero) de cada instante:
+
+      | Instante | Nível 1 | Nível 2 | Nível 3 |
+      |:---|:---|:---|:---|
+      | `10889-08-02T05:31:50Z` | `ffffffff-fd70-7000-8000-000000000000` | `ffffffff-fd70-7000-8000-000000000000` | `ffffffff-fd70-7000-8000-000000000000` |
+      | `10889-08-02T05:31:50.655Z` | `ffffffff-ffff-7000-8000-000000000000` | `ffffffff-ffff-7000-8000-000000000000` | `ffffffff-ffff-7000-8000-000000000000` |
+      | `10889-08-02T05:31:50.655456789Z` | `ffffffff-ffff-7000-8000-000000000000` | `ffffffff-ffff-71c8-8000-000000000000` | `ffffffff-ffff-71c8-b150-000000000000` |
+      | `10889-08-02T05:31:50.656Z` e posteriores | `ffffffff-ffff-7000-8000-000000000000` | `ffffffff-ffff-73e7-8000-000000000000` | `ffffffff-ffff-73e7-be70-000000000000` |
+
+      A fronteira superior saturada do Nível 3 é
+      `ffffffff-ffff-73e7-be7f-ffffffffffff`. A geração por instante com
+      entropia nula, que usa a mesma decomposição (seção 3.6), produz a
+      fronteira inferior de cada linha, e a leitura por nível de cada
+      fronteira devolve o instante truncado à resolução do nível, ou o
+      último instante representável nas linhas saturadas.
 11. **Geração por Instante Explícito (seção 3.6)**:
     - **Ida e volta com a extração**: gerar para segundos, milissegundos,
       microssegundos e nanossegundos conhecidos e conferir que a leitura
@@ -1184,6 +1314,18 @@ reais:
       versão e o de fonte de entropia **não** sejam reconhecidos como
       erro de formato, e que o UUIDv4 que a extração de tempo recusa seja
       aceito pelo analisador permissivo.
+    - No JSON do tipo anulável, repetir a string curta, a de chaves
+      trocadas e a de dígito inválido **com uma sequência de escape**
+      JSON no conteúdo. Com escape, a leitura passa pelo decodificador de
+      JSON da linguagem antes da análise, e o erro específico da análise
+      (comprimento, chaves) **DEVE** sobreviver ao desvio, e não virar o
+      sentinela puro.
+    - Exigir a recusa com erro de comprimento de **todo** comprimento de
+      0 a 64 bytes diferente de 16 na construção binária e nas
+      desserializações binárias dos quatro tipos, com o receptor intacto
+      (nos anuláveis, o comprimento zero é ausência de valor, pela seção
+      8). Testar só 15 bytes deixa passar a aceitação silenciosa de 17 ou
+      mais, com o excedente descartado.
 18. **Ausência de Valor por Formato (seção 8)**:
     - Serializar o tipo anulável sem valor para banco, JSON, texto e
       binário e exigir, respectivamente, `NULL`, o literal `null`, a
@@ -1194,6 +1336,28 @@ reais:
       inteiro intacto; fazer a mesma leitura recusada pela via de banco e
       exigir erro com o identificador intacto e o booleano falso, que é a
       exceção da seção 6.4.
+19. **Coerência da API de Apoio (seções 6.3, 7 e 8)**:
+    - A leitura de banco dos quatro tipos e a análise que entra em pânico
+      **DEVEM** aceitar as quatro formas do analisador permissivo, em
+      maiúsculas e minúsculas, e a leitura de banco também com o texto
+      em sequência de bytes. Testar só a forma canônica deixa passar
+      qualquer restrição a ela.
+    - A comparação **DEVE** distinguir cada uma das 16 posições sozinha,
+      com os demais bytes em zero e em um, e com `0x7f` contra `0x80`,
+      que também denuncia comparação com sinal. O predicado do UUID nulo
+      **DEVE** recusar um valor com um único byte diferente de zero, em
+      cada posição, e a fronteira inferior de Nível 1 na época, que
+      começa e termina em zero mas é UUIDv7.
+    - As duas leituras de instante **DEVEM** devolver UTC em todos os
+      níveis, nos desconhecidos e no caminho do descarte por faixa. A
+      conferência é pela identidade do fuso UTC da linguagem, e não pelo
+      nome: numa máquina configurada em UTC o fuso local também se chama
+      "UTC", e um instante em horário local passaria despercebido
+      justamente na integração contínua.
+    - A serialização binária nativa da linguagem que usa a interface
+      binária (em Go, `encoding/gob`) **DEVE** fazer a ida e volta dos
+      quatro tipos dentro de uma estrutura: com valor, sem valor e com o
+      UUID nulo presente.
 
 ---
 
@@ -1216,6 +1380,7 @@ pacote faz diferente" não são argumento novo.
 | **Não há contador monotônico** no gerador padrão nem como construtor opcional. | 2026-09-11 | Protótipo com contador de 16 bits e estado atômico: +8,5% em série e **32 vezes** pior em paralelo (7,40 ns para 233,6 ns em 8 núcleos). Exige ainda decidir layout por nível, política de estouro e conviver com a leitura cega de nível na importação, que leria o contador como tempo. Ver 3.4. | Uma construção que dê ordem estrita **sem** estado compartilhado entre threads. |
 | **O caminho quente não ganha desvio, indireção nem alocação** para acomodar funcionalidade nova. | permanente | Dezenas de nanossegundos por identificador é o objetivo declarado na seção 1. Uma chamada indireta a mais pode impedir a embutição e custar 1 a 2 ns em um caminho de 40 ns. | Medição antes e depois mostrando custo nulo. |
 | **As travas de alocação são requisito verificável da seção 10 (caso 16), não só propriedade desta implementação.** | 2026-09-12 | O objetivo de zero alocação estava declarado na seção 1 sem nenhum caso de teste que o cobrasse. A lista de operações, a exceção única da conversão para texto e a condição de medir sem o detector de corrida viviam só nas instruções de manutenção, que não são especificação. A alternativa, tratar desempenho como propriedade da implementação e não do formato, foi recusada: uma reimplementação poderia alocar em toda geração e se dizer conforme. | Uma linguagem-alvo em que o limite de uma alocação por operação seja comprovadamente inatingível, caso em que a divergência é registrada junto da trava, e não a trava removida. |
+| **O gerador sobre leitor forma cada palavra com 8 bytes em ordem de rede, completa as leituras curtas e lê `r1` antes de `r2`; a correspondência é contrato (seção 5.3).** | 2026-09-13 | Era detalhe de implementação, sem teste: uma campanha de mutação mostrou que trocar a ordem dos bytes, ou aceitar a leitura pela metade, passava pela suíte inteira. É a única construção em que o mapeamento de bytes em bits é visível ao chamador, e quem usa um leitor determinístico para reproduzir identificadores depende dele. A leitura curta sem erro é permitida pelo contrato de leitor da linguagem, e aceitá-la deixaria bytes zerados na palavra, a degradação silenciosa que a seção 5.2 proíbe. | Nada previsto: mudar a ordem muda os identificadores de quem já usa leitor determinístico. |
 
 ### 11.2 Testabilidade
 
@@ -1224,6 +1389,8 @@ pacote faz diferente" não são argumento novo.
 | **O relógio não é injetável.** A geração lê o relógio do sistema diretamente. | 2026-09-11 | A motivação original era testar bordas de relógio; isso foi resolvido isolando a decomposição do instante (3.2) em função pura, testada de dentro do pacote. O layout de bits está travado por testes de entropia fixa. Sobrava apenas o vetor dourado de ponta a ponta, que não paga um campo de função no caminho quente. | Necessidade de teste que a função pura de decomposição comprovadamente não cobre. |
 | **A duplicação entre a formatação canônica do caminho quente e a dos serializadores é deliberada.** | permanente | A conversão para texto é caminho quente e não deve pagar uma chamada de função por causa dos serializadores. As duas cópias são pequenas e travadas pelos mesmos testes. | Compilador que comprovadamente embuta a chamada sem custo. |
 | **O layout de bytes é escrito duas vezes, e só duas: uma no caminho quente e uma compartilhada por tudo que constrói a partir de um instante (seções 3.5 e 3.6).** | 2026-09-11 | O empacotamento compartilhado recebe os bits livres por parâmetro: constantes na fronteira, sorteados na geração por instante. Fundi-lo com a geração pelo relógio poria uma chamada ou um desvio no caminho quente, que a decisão 11.1 proíbe. O limite é esse: **uma** cópia privada, no caminho quente, e nenhuma outra duplicação tolerada. A divergência entre as duas é travada por teste, que gera pelo relógio, lê o instante de volta e regera para ele exigindo bytes idênticos. | Compilador que comprovadamente embuta a chamada sem custo, medido antes e depois. |
+| **O gerador padrão continua sem ponto de injeção; as formas de gerar que o usam são provadas por assinatura estatística dos bits livres.** | 2026-09-13 | As funções de pacote não recebem fonte, e uma campanha de mutação mostrou que todas podiam ignorar o nível pedido, e os nomes, chamar o nível errado, sem nenhuma falha: continuavam produzindo UUIDv7 válidos e distintos. Um ponto de injeção no gerador padrão resolveria o teste criando estado global mutável, que quebraria a independência de ordem da suíte (seção 10, caso 9) e daria a qualquer código do processo o poder de trocar a entropia de todos. A assinatura pela faixa dos campos (seção 10, caso 1) distingue os três níveis com probabilidade de falso alarme abaixo de 10^-41 em 4.000 amostras, a um custo de milissegundos, e a mesma técnica prova a independência das duas palavras do gerador padrão (seção 3.3). | Um nível novo cuja assinatura não se distinga pela faixa dos campos. |
+| **A origem dos bits do gerador criptográfico é provada trocando a fonte criptográfica global do sistema só durante a construção; por isso a suíte não usa testes paralelos.** | 2026-09-13 | Validar o resultado não prova a origem: um gerador criptográfico que caísse na fonte padrão produziria UUIDv7 igualmente válidos, e a campanha de mutação mostrou exatamente isso. Provar sem trocar a fonte exigiria um gancho de teste no código de produção, ou API pública nova para um uso que não é de produção. A troca é desfeita antes de qualquer geração; um teste paralelo que lesse a fonte ao mesmo tempo seria corrida de dados, e por isso um teste confere que nenhum arquivo de teste da suíte declara execução paralela. | Um meio, na versão mínima suportada da linguagem, de tornar a fonte criptográfica determinística só dentro de um teste, sem variável global. |
 
 ### 11.3 Contrato público
 
@@ -1238,11 +1405,13 @@ pacote faz diferente" não são argumento novo.
 | **O versionamento permanece em `v0.x`** até a superfície pública assentar. | 2026-09-13 | O projeto acaba de nascer com a superfície reduzida e com mudanças de assinatura em relação à biblioteca de origem. Um compromisso de estabilidade só faz sentido depois de uso real. | Uso em produção estabilizado, mais revisão da superfície pública inteira e política de compatibilidade publicada. |
 | **A construção a partir de um instante — `MinAt`, `MaxAt`, `RangeAt` e `GenerateAt` — recebe o instante por parâmetro, e isso não reabre a decisão 11.2.** | 2026-09-11 | O que a 11.2 recusou foi um campo de função de relógio dentro do `Generator`, no caminho quente, como costura de teste. Aqui o instante é parâmetro de funções separadas, a geração nunca as chama e o caminho quente não ganha desvio nem indireção, então a regra da 11.1 continua satisfeita. Sem elas, a consulta por intervalo — o argumento central para adotar UUIDv7 como chave primária — exige que o chamador monte os 16 bytes à mão, e é justamente o cálculo por nível que ele erra. Os nomes `MinAt`/`MaxAt` foram escolhidos sobre `FloorAt`/`CeilAt` e `LowerBound`/`UpperBound` por serem curtos e dizerem o extremo. `RangeAt` devolve intervalo **semiaberto**, que é a forma do SQL que motiva a função. | Uma proposta de fazer a geração chamar estas funções, ou de mover o instante para dentro do `Generator`, que aí sim seria a 11.2. |
 | **As fronteiras saturam nas duas pontas da faixa representável**, inclusive levando `micro` e `nano` a 999 no teto. | 2026-09-11 | Uma fronteira é predicado de consulta: o que a torna correta é nunca regredir quando o instante avança. Truncar os bits excedentes, como o empacotamento por deslocamento faria de graça, deixaria a fronteira dar a volta e a consulta devolveria as linhas erradas em silêncio. Saturar no teto é a escolha simétrica ao piso na época que a seção 3.2 já faz embaixo. Zerar `micro` e `nano` na saturação quebraria a monotonicidade na travessia da borda, e há teste para isso. | Nada previsto: a alternativa é aceitar resposta errada em silêncio. |
+| **A saturação acima de 48 bits diverge, de propósito, do truncamento da RFC 9562 §6.1**, que manda manter os bits menos significativos de um carimbo grande demais. | 2026-09-13 | A regra da RFC faz um instante posterior a 10889-08-02 dar a volta para perto de 1970: numa fronteira ou numa geração por instante, isso é o erro silencioso da decisão acima, agora com o texto da RFC a favor dele. A divergência vale só para a construção a partir de um instante (seções 3.5 e 3.6); a geração pelo relógio conserva o truncamento natural do empacotamento, e o relógio não chega ao teto antes daquele ano. O ponto exato em que a saturação entra é travado por vetores (seção 10, caso 10). | Uma revisão da RFC que trate de instantes além da faixa de 48 bits. |
 | **Os bits livres de `GenerateAt` são sorteados, não zerados.** | 2026-09-11 | O verbo pedido é gerar, e um gerador que devolve o mesmo valor para o mesmo instante colide na primeira repetição. A forma determinística de um instante já existe, e é a seção 3.5: expor uma segunda com nome de gerador convidaria ao mal-entendido mais caro possível. A entropia vem do mesmo gerador do resto da biblioteca, por isso as funções também existem como métodos. | Nada previsto: a alternativa determinística já está coberta por `MinAt`. |
 | **A forma é `GenerateAt(nível, instante)`, e não uma família de quatro aridades.** | 2026-09-11 | A proposta original mapeava a aridade no nível: quatro funções por número de argumentos, cada uma com variante em texto, em função de pacote e em método, somando dezesseis símbolos novos. A forma escolhida usa o mesmo par nível-instante que `Generate(nível)` e `MinAt(nível, instante)` já usam, custa quatro símbolos e deixa uma única maneira de dizer nível na biblioteca inteira. | Uso real mostrando que a forma posicional por campos de tempo é necessária, e não só conveniente. |
 | **Não há tipo de lista de UUIDs, nem implementação da interface de ordenação clássica.** | 2026-09-13 | A biblioteca padrão do Go ordena com uma função de comparação desde a 1.21, e o `go.mod` já está em 1.22: `slices.SortFunc(lista, UUID.Compare)` resolve em uma linha, sem alocação, reusando o `Compare` que já existe e já é testado, e a documentação de `Compare` diz isso. Um tipo próprio acrescentaria símbolos exportados para oferecer um caminho mais verboso que o que o chamador já tem. | Uma interface de terceiros que exija a interface de ordenação clássica e não aceite função de comparação. |
 | **A escrita em banco continua sendo texto por padrão, e a forma binária é um tipo à parte.** | 2026-09-11 | Trocar o formato de `Value` quebraria em silêncio quem já tem texto gravado: a mesma coluna passaria a ter duas representações e nenhuma consulta acharia as linhas antigas. Tornar o formato configurável é pior ainda, porque estado global mudaria o comportamento de bibliotecas de terceiros no mesmo processo. O tipo à parte deixa a escolha explícita no ponto da consulta, sem efeito sobre quem não usa. A leitura sempre aceitou as duas formas e continua aceitando. | Nada previsto: unificar os dois caminhos é a quebra que a decisão evita. |
 | **A extração completa (`ImportBinary`/`Import`) é cega quanto ao nível e a leitura por nível (`TimestampWithLevel`) descarta por faixa; as duas políticas são opostas de propósito e não serão unificadas.** | 2026-09-12 | Uma operação entrega os bits, a outra entrega um instante. Unificar tiraria do chamador a única leitura que devolve `rand_a` e o topo de `rand_b` crus, quebraria o vetor do caso 13 da seção 10 e mudaria o resultado público das duas. As duas conferem a versão antes (decisão acima); a cegueira é só quanto ao nível. | Uma terceira operação que receba o nível e devolva os campos crus com um indicador de validade, sem alterar as duas existentes. |
+| **Os campos abaixo do milissegundo são contagens decimais de 0 a 999, e não a fração binária do Método 3 da RFC 9562 §6.2**; o Nível 3 usa 22 bits de tempo, além dos 12 que o método prevê. | 2026-09-13 | A codificação decimal é o que dá sentido às duas leituras da seção 7: a extração devolve os campos direto como microssegundos e nanossegundos, e a leitura por nível reconhece ruído porque um valor acima de 999 não pode ser tempo. Com a fração binária, os 4096 valores de `rand_a` seriam todos válidos, e nenhum valor denunciaria um identificador de Nível 1 lido como Nível 2. O Método 3 é opcional na RFC, que recomenda tratar o identificador como opaco, e o resultado continua sendo UUIDv7 válido e ordenável. A seção 5.7 da RFC admite preencher os 74 bits com subcampos para ordenar dentro do milissegundo, na ordem fração de até 12 bits, contador e aleatório; os 10 bits de nanossegundos do Nível 3 ocupam os bits altos de `rand_b`, o lugar que os métodos 1 e 2 dão ao contador, com a mesma função de ordenar, mas fora da letra da RFC, que não prevê tempo ali. O custo é de interoperabilidade: um leitor de terceiros que siga o Método 3 lê errado o sub-milissegundo (456 µs viram cerca de 111 µs), e a resolução de `rand_a` fica no microssegundo, e não em cerca de 244 ns. A codificação vem da biblioteca de origem e está nos vetores dourados (seção 10, caso 12): mudá-la é mudança de formato de dados. | Um nível novo com a fração binária, acrescentado sem alterar os três existentes; nunca a troca da codificação de um nível publicado. |
 | **O gerador sem fonte de entropia (valor zero, ou referência nula) recorre à fonte padrão do pacote; fonte nula ou leitor nulo na construção entram em pânico.** | 2026-09-12 | A regra crítica da seção 5.2 manda falhar alto quando a **fonte falha**, e o valor zero era a única exceção não escrita: um auditor que a comparasse com a regra tinha fundamento textual para propor o pânico. Os três casos foram separados na seção 5.2. No valor zero não há degradação, porque a fonte padrão é a mesma que a construção correta instalaria; derrubar o processo em produção por um campo não inicializado penalizaria o chamador por um erro que não afeta a qualidade dos bits. A tolerância vale para o tipo inteiro e é travada por teste na geração pelo relógio, nos nomes e na geração por instante. | Uma versão maior que aceite quebra de compatibilidade e um caso real em que o silêncio tenha escondido um erro de configuração. |
 | **O prefixo URN inválido devolve o sentinela de formato puro, e não um erro próprio, ao contrário das chaves malformadas.** | 2026-09-12 | A assimetria não tem motivo técnico: veio com a primeira versão do analisador permissivo e nunca foi registrada. Criar o erro de prefixo é acréscimo de símbolo público e muda o valor devolvido para uma entrada que hoje recebe o sentinela puro, também na biblioteca de origem; quem verifica pelo sentinela não quebraria, quem compara por igualdade direta, sim. A escolha foi documentar a assimetria na seção 6.4 e travá-la no caso 17 da seção 10. | Um chamador real que precise distinguir prefixo inválido de dígito inválido, ou a próxima versão maior, quando a taxonomia inteira for revista de uma vez. |
 | **Os dois anexadores em buffer do chamador, o de texto e o de binário, andam juntos; o binário não ganha uma segunda forma sem erro.** | 2026-09-12 | O motivo de existir o anexador de texto é serializar em volume sem alocar, e quem grava em coluna binária é justamente quem grava em volume. Em linguagens com as duas interfaces de anexação, satisfazer só a de texto deixa o tipo pela metade em consumidor genérico. O lado binário fica com uma única forma, a da interface, porque `append(dst, u[:]...)` é literalmente o corpo dela: `AppendTo` existe no texto porque a formatação canônica é um cálculo, e os bytes não são. O conteúdo coincide com a serialização binária, então nada de gravado muda. | Uma terceira interface de anexação na biblioteca padrão da linguagem. |

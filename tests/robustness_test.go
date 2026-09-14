@@ -292,3 +292,102 @@ func TestPackageLevelShortcuts(t *testing.T) {
 		}
 	}
 }
+
+// observedLevel infere em que nível uma forma de gerar grava, pela
+// assinatura estatística dos bits livres, sem precisar injetar entropia.
+// É a única prova possível para as funções de pacote, que usam o gerador
+// padrão e não aceitam fonte (docs/SPEC.md seção 11.2).
+//
+// A assinatura decorre da seção 3.1: no Nível 1, rand_a é aleatório e
+// passa de 999 em 3096 de cada 4096 amostras; nos níveis 2 e 3 carrega os
+// microssegundos e nunca passa. O topo de rand_b é aleatório no Nível 2 e
+// passa de 999 em 24 de cada 1024 amostras; no Nível 3 carrega os
+// nanossegundos e nunca passa. Com 4.000 amostras, confundir o Nível 2 com
+// o 3 tem probabilidade abaixo de 10^-41, e o Nível 1 com qualquer outro,
+// muito menor; os níveis 2 e 3 nunca são confundidos com o 1.
+func observedLevel(gen func() uuidv7.UUID) uuidv7.Level {
+	const samples = 4_000
+	randAAbove999, topBAbove999 := false, false
+	for i := 0; i < samples; i++ {
+		u := gen()
+		if uint16(u[6]&0x0F)<<8|uint16(u[7]) > 999 {
+			randAAbove999 = true
+		}
+		if uint16(u[8]&0x3F)<<4|uint16(u[9]>>4) > 999 {
+			topBAbove999 = true
+		}
+	}
+	switch {
+	case randAAbove999:
+		return uuidv7.Level1
+	case topBAbove999:
+		return uuidv7.Level2
+	}
+	return uuidv7.Level3
+}
+
+// TestEveryGenerationFormWritesItsLevel estende o caso 1 da seção 10 a
+// todas as formas de gerar. TestGenerateV7LevelNamesMatchLevels prova o
+// nível dos nomes pelo método, com entropia injetada; as funções de pacote
+// não recebem fonte, e uma campanha de mutação mostrou que Generate,
+// GenerateString, GenerateAt e GenerateAtString podiam ignorar o nível
+// pedido, e os nomes GenerateV7 e GenerateV7Level1 a GenerateV7Level3
+// podiam chamar o nível errado, sem nenhuma falha: todos continuam
+// produzindo UUIDv7 válidos e distintos. A assinatura de observedLevel
+// pega os dois defeitos, nas funções de pacote e nos métodos.
+func TestEveryGenerationFormWritesItsLevel(t *testing.T) {
+	g := uuidv7.NewGenerator()
+	forms := []struct {
+		name string
+		gen  func(uuidv7.Level) uuidv7.UUID
+	}{
+		{"Generate (pacote)", uuidv7.Generate},
+		{"Generate (método)", g.Generate},
+		{"GenerateString (pacote)", func(l uuidv7.Level) uuidv7.UUID { return mustParse(t, uuidv7.GenerateString(l)) }},
+		{"GenerateString (método)", func(l uuidv7.Level) uuidv7.UUID { return mustParse(t, g.GenerateString(l)) }},
+		{"GenerateAt (pacote)", func(l uuidv7.Level) uuidv7.UUID { return uuidv7.GenerateAt(l, instanteConhecido) }},
+		{"GenerateAt (método)", func(l uuidv7.Level) uuidv7.UUID { return g.GenerateAt(l, instanteConhecido) }},
+		{"GenerateAtString (pacote)", func(l uuidv7.Level) uuidv7.UUID {
+			return mustParse(t, uuidv7.GenerateAtString(l, instanteConhecido))
+		}},
+		{"GenerateAtString (método)", func(l uuidv7.Level) uuidv7.UUID {
+			return mustParse(t, g.GenerateAtString(l, instanteConhecido))
+		}},
+	}
+	levels := []struct {
+		asked, want uuidv7.Level
+	}{
+		{uuidv7.Level1, uuidv7.Level1},
+		{uuidv7.Level2, uuidv7.Level2},
+		{uuidv7.Level3, uuidv7.Level3},
+		{uuidv7.Level(0), uuidv7.Level1}, // desconhecidos se comportam como o Nível 1
+		{uuidv7.Level(9), uuidv7.Level1},
+	}
+	for _, f := range forms {
+		for _, l := range levels {
+			if got := observedLevel(func() uuidv7.UUID { return f.gen(l.asked) }); got != l.want {
+				t.Errorf("%s(nível %d): os bits livres são de nível %d, esperado %d", f.name, l.asked, got, l.want)
+			}
+		}
+	}
+
+	names := []struct {
+		name string
+		want uuidv7.Level
+		gen  func() uuidv7.UUID
+	}{
+		{"GenerateV7 (pacote)", uuidv7.Level1, uuidv7.GenerateV7},
+		{"GenerateV7Level1 (pacote)", uuidv7.Level1, uuidv7.GenerateV7Level1},
+		{"GenerateV7Level2 (pacote)", uuidv7.Level2, uuidv7.GenerateV7Level2},
+		{"GenerateV7Level3 (pacote)", uuidv7.Level3, uuidv7.GenerateV7Level3},
+		{"GenerateV7 (método)", uuidv7.Level1, g.GenerateV7},
+		{"GenerateV7Level1 (método)", uuidv7.Level1, g.GenerateV7Level1},
+		{"GenerateV7Level2 (método)", uuidv7.Level2, g.GenerateV7Level2},
+		{"GenerateV7Level3 (método)", uuidv7.Level3, g.GenerateV7Level3},
+	}
+	for _, n := range names {
+		if got := observedLevel(n.gen); got != n.want {
+			t.Errorf("%s: os bits livres são de nível %d, esperado %d", n.name, got, n.want)
+		}
+	}
+}

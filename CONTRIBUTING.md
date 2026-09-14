@@ -10,10 +10,11 @@ ter para ser aceita. As regras completas de manutenção estão em
   request grande.
 - **Consulte antes a seção 11 do `docs/SPEC.md`**, o registro de decisões
   firmadas. Ela diz o que já foi avaliado e decidido — fonte de entropia
-  do gerador padrão, ausência de contador monotônico, relógio não
-  injetável, as duplicações deliberadas de código, o escopo só de
-  UUIDv7, a permanência em `v0.x` — com o motivo de cada uma e o que
-  justificaria revê-la.
+  do gerador padrão, ausência de contador monotônico, relógio e gerador
+  padrão não injetáveis, as duplicações deliberadas de código, o escopo
+  só de UUIDv7, a codificação decimal do sub-milissegundo e a saturação
+  acima de 48 bits, que divergem da RFC 9562 de propósito, a permanência
+  em `v0.x` — com o motivo de cada uma e o que justificaria revê-la.
   Proposta que apenas reconhece um desses padrões, sem trazer argumento
   novo, será encerrada apontando para lá. Medição própria, caso de uso
   concreto ou mudança na RFC são argumentos novos; preferência de estilo
@@ -80,4 +81,13 @@ só é revisado com o fluxo `test` verde.
 - Afrouxar uma trava de alocação ou uma invariante para fazer um teste
   passar. Se um teste falha em um sistema específico, a correção é no
   teste ou na documentação.
+- `t.Parallel` em `./tests/`. `TestCryptoGeneratorReadsCryptoRandReader`
+  troca `crypto/rand.Reader` durante a construção do gerador, e um teste
+  paralelo que lesse a mesma variável seria corrida de dados;
+  `TestSuiteHasNoParallelTests` falha se algum arquivo de teste do pacote
+  chamar `Parallel`.
+- Teste que só confere validade ou ida e volta onde o valor exato pode ser
+  conferido. Com 100% de cobertura, uma campanha de mutação mostrou 34 de
+  45 defeitos passando por testes assim; ver a seção 10 do
+  `docs/SPEC.md`.
 - Arquivos novos na raiz que não sejam código de produção.

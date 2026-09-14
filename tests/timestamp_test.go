@@ -71,6 +71,33 @@ func TestTimestampRoundTrip(t *testing.T) {
 	}
 }
 
+// TestTimeReadingsReturnUTC confere que as duas leituras de instante
+// devolvem UTC em todos os níveis, inclusive nos desconhecidos e no caminho
+// do descarte por faixa (docs/SPEC.md seção 7). A comparação é pela
+// identidade de time.UTC, e não pelo nome do fuso: numa máquina com TZ=UTC,
+// como os runners da integração contínua, o fuso local também se chama
+// "UTC". Antes deste teste só TestTimestampRoundTrip conferia o fuso, e só
+// de Timestamp; uma campanha de mutação mostrou que TimestampWithLevel podia
+// devolver o horário local e só um exemplo falhava, e só fora de UTC.
+func TestTimeReadingsReturnUTC(t *testing.T) {
+	cases := map[string]uuidv7.UUID{
+		"campos na faixa":      uuidv7.MinAt(uuidv7.Level3, baseInstant),
+		"campos fora da faixa": uuidv7.MustParse(canonical),
+		"gerado pelo relógio":  uuidv7.Generate(uuidv7.Level3),
+	}
+	levels := []uuidv7.Level{uuidv7.Level1, uuidv7.Level2, uuidv7.Level3, uuidv7.Level(0), uuidv7.Level(9)}
+	for name, u := range cases {
+		if got, ok := u.Timestamp(); !ok || got.Location() != time.UTC {
+			t.Errorf("%s: Timestamp = %v em %v, %v; esperado UTC", name, got, got.Location(), ok)
+		}
+		for _, level := range levels {
+			if got, ok := u.TimestampWithLevel(level); !ok || got.Location() != time.UTC {
+				t.Errorf("%s: TimestampWithLevel(%d) = %v em %v, %v; esperado UTC", name, level, got, got.Location(), ok)
+			}
+		}
+	}
+}
+
 // TestTimestampWithLevelRecoversSubMillisecond confere que a precisão
 // gravada pelos níveis 2 e 3 é recuperada como time.Time.
 func TestTimestampWithLevelRecoversSubMillisecond(t *testing.T) {

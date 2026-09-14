@@ -26,6 +26,105 @@ deve ler a especificação primeiro. Decisão nova entra nos dois lugares.
 
 ## [Não publicado]
 
+Nenhuma mudança no código de produção. Uma revisão em 2026-09-13 aplicou
+à suíte, que já tinha 100% de cobertura de instruções, uma campanha de
+mutação dirigida: de 45 defeitos injetados um por vez, em pontos
+suspeitos, 34 passavam sem nenhuma falha. O código estava correto em
+todos esses pontos, e cada um foi conferido à parte; faltavam os testes
+que impedissem a regressão. Com os testes abaixo, os 45 são detectados.
+
+### Adicionado
+
+- **Fiação da entropia** (`tests/entropy_test.go`, arquivo novo).
+  `TestEntropyWordsFeedTheirFields` trava, com palavras distintas, que no
+  Nível 1 `rand_a` vem de `r1` e `rand_b` de `r2`, e que nos níveis 2 e 3
+  `rand_b` vem da única palavra sorteada, pelo relógio e por instante.
+  `TestReaderGeneratorByteOrderAndShortReads` trava a ordem de rede, a
+  ordem `r1`, `r2`, o consumo de 8 bytes por palavra e a leitura curta
+  completada, com um leitor que entrega um byte por chamada.
+  `TestCryptoGeneratorReadsCryptoRandReader` prova que
+  `NewCryptoGenerator` lê `crypto/rand.Reader`, trocado só durante a
+  construção, e `TestSuiteHasNoParallelTests` falha se algum arquivo de
+  teste do pacote chamar `Parallel`, o que tornaria a troca uma corrida de
+  dados. `TestTextFormsUseTheGeneratorEntropy` prova que
+  `GenerateString` e `GenerateAtString` usam a fonte do próprio gerador.
+  `TestDefaultGeneratorDrawsIndependentWords` confere em volume que o
+  gerador padrão sorteia duas palavras independentes no Nível 1.
+- **Nível de todas as formas de gerar** (`tests/robustness_test.go`).
+  `TestEveryGenerationFormWritesItsLevel` confere, pela assinatura
+  estatística dos bits livres, o nível de `Generate`, `GenerateString`,
+  `GenerateAt` e `GenerateAtString`, como função de pacote e como método,
+  nos três níveis e em níveis desconhecidos, e dos quatro nomes. Antes, só
+  os nomes chamados como método tinham o nível provado.
+- **Oráculo exato das mutações de um byte** (`tests/parsing_test.go`).
+  `TestFromStringNeverPanics` passa a exigir, nas 36 x 256 mutações, que
+  `FromString` aceite exatamente as que mantêm a forma canônica, com o
+  valor decodificado por `encoding/hex`, e não só que não entre em pânico.
+  `TestParseSingleByteMutations` estende o critério a `Parse`,
+  `ParseBytes` e `Validate` nas quatro formas, inclusive chaves e prefixo
+  URN. `FuzzParse` (`tests/fuzz_test.go`) ganha o mesmo tipo de oráculo
+  para entradas arbitrárias: toda entrada aceita tem de ser, sem distinção
+  de caixa, uma das quatro formas do valor lido, porque a ida e volta
+  sozinha não percebe um hífen ou um dois-pontos que deixaram de ser
+  conferidos.
+- **Valores exatos no teto de 48 bits** (`tests/bounds_test.go`).
+  `TestBoundsExactValuesAtTheTopOfTheRange` confere as fronteiras dos três
+  níveis no início do último segundo representável, no último
+  milissegundo, dentro dele e nos dois primeiros instantes saturados, mais
+  a geração por instante com entropia nula e a leitura de volta.
+- `TestSplitUnixInstantFloorsPreEpoch` (`instant_internal_test.go`) passa
+  a ser tabela, com o último nanossegundo antes da época, em que o
+  carimbo vale -1, e o valor zero de `time.Time`.
+- `TestTimeReadingsReturnUTC` (`tests/timestamp_test.go`): as duas
+  leituras de instante devolvem `time.UTC` em todos os níveis, conferido
+  por identidade, o que também vale numa máquina com `TZ=UTC`.
+- Em `tests/api_test.go`: `TestVersionAndVariantReadTheirBits`, sobre
+  todas as versões e variantes; `TestCompareAndIsZeroSeeEveryByte`, sobre
+  cada uma das 16 posições; `TestScanAndMustParseAcceptEveryParseFormat`,
+  nos quatro tipos de banco e em `MustParse`; e, em `TestErrorTaxonomy`,
+  três casos de JSON com sequência de escape, que passam pelo
+  `encoding/json` e precisam manter o erro específico de `Parse`. O caso
+  que se chamava "string com escape e dígito inválido" não tinha escape e
+  passou a se chamar "string com dígito inválido".
+- Em `tests/binary_serialization_test.go`:
+  `TestBinaryDecodersRejectEveryOtherLength`, de 0 a 64 bytes, e
+  `TestGobRoundTrip`, com os quatro tipos numa estrutura.
+
+### Documentação
+
+- `docs/SPEC.md`: a seção 3.1 registra que a codificação sub-milissegundo
+  é decimal, e não a do Método 3 da RFC; a 3.3 torna normativa a
+  correspondência entre palavras e campos; a 3.5 registra a divergência do
+  truncamento da RFC e o ponto exato em que a saturação entra; a 5.3 torna
+  normativa a formação das palavras a partir do leitor e a prova de origem
+  do gerador criptográfico. Na seção 10, os casos 1, 2, 3, 4, 10 e 17
+  ganharam os requisitos acima, e o caso 19, novo, reúne a coerência da
+  API de apoio.
+- `README.md`: nota sobre a codificação decimal e a leitura do
+  sub-milissegundo por outras bibliotecas.
+- `CLAUDE.md`, `CONTRIBUTING.md`, `STARTHERE.md` e
+  `docs/TEST-AND-BENCHMARK.md`: o arquivo novo de testes, a proibição de
+  `t.Parallel` na suíte e as decisões novas.
+
+### Decisões
+
+Registradas em `docs/SPEC.md` seção 11, com o que justificaria revê-las.
+
+- **Os campos sub-milissegundo são decimais, e não a fração binária do
+  Método 3 da RFC 9562 §6.2** (11.3). É o que permite à leitura por nível
+  reconhecer ruído pela faixa; o custo é a leitura errada do
+  sub-milissegundo por bibliotecas que sigam o Método 3.
+- **A saturação acima de 48 bits diverge do truncamento da RFC 9562
+  §6.1** (11.3), só na construção a partir de um instante.
+- **O gerador sobre leitor usa ordem de rede, completa leituras curtas e
+  lê `r1` antes de `r2`**, agora como contrato (11.1).
+- **Recusado um ponto de injeção no gerador padrão para testar as funções
+  de pacote** (11.2): a prova é a assinatura estatística, sem estado
+  global mutável.
+- **A prova de origem do gerador criptográfico troca
+  `crypto/rand.Reader` durante a construção**, e por isso a suíte não usa
+  `t.Parallel` (11.2).
+
 ---
 
 ## [v0.0.1] — 2026-09-13

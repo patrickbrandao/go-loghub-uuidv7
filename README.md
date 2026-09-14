@@ -36,6 +36,12 @@ e 8) estão na biblioteca de origem deste projeto,
 
 Todos preservam versão 7 e variante RFC.
 
+Os microssegundos e os nanossegundos são gravados como contagens decimais
+de 0 a 999, e não como a fração binária do Método 3 da RFC 9562. Qualquer
+biblioteca lê o milissegundo destes identificadores; o sub-milissegundo só
+esta biblioteca, ou uma implementação de [docs/SPEC.md](docs/SPEC.md), lê
+corretamente. O motivo está na seção 11.3 da especificação.
+
 ## Gerar
 
 | Função                       | O que devolve                                   |

@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"encoding/hex"
 	"errors"
 	"strings"
 	"testing"
@@ -40,9 +41,73 @@ func safeFromString(s string) (u uuidv7.UUID, panicked any, err error) {
 	return
 }
 
+// textForm é uma das quatro formas textuais aceitas por Parse, escrita
+// sobre a string canônica de referência.
+type textForm struct {
+	name      string
+	text      string
+	bodyStart int  // deslocamento do primeiro caractere do corpo
+	hyphens   bool // corpo 8-4-4-4-12, com 36 caracteres, ou 32 dígitos crus
+}
+
+// canonicalForm é a única forma que FromString aceita.
+var canonicalForm = textForm{"canônica", canonical, 0, true}
+
+// textForms são as quatro formas de canonical que o analisador permissivo
+// aceita.
+var textForms = []textForm{
+	canonicalForm,
+	{"entre chaves", "{" + canonical + "}", 1, true},
+	{"URN", "urn:uuid:" + canonical, 9, true},
+	{"hexadecimal cru", strings.ReplaceAll(canonical, "-", ""), 0, false},
+}
+
+// expectMutation é o oráculo das mutações de um byte, independente da
+// biblioteca: diz se a forma continua válida com o byte c na posição p e,
+// se continua, que valor ela representa, decodificado por encoding/hex.
+// Posição de dígito aceita qualquer dígito hexadecimal, em qualquer caixa;
+// posição de hífen, só o hífen; as chaves, só elas mesmas; e o prefixo URN,
+// as mesmas letras em qualquer caixa e os mesmos dois-pontos.
+func expectMutation(f textForm, p int, c byte) (uuidv7.UUID, bool) {
+	mutated := []byte(f.text)
+	mutated[p] = c
+	bodyLen := 32
+	if f.hyphens {
+		bodyLen = 36
+	}
+	digits := make([]byte, 0, 32)
+	for i, got := range mutated {
+		offset := i - f.bodyStart
+		switch {
+		case offset < 0 || offset >= bodyLen:
+			if 'A' <= got && got <= 'Z' {
+				got += 'a' - 'A'
+			}
+			if got != f.text[i] {
+				return uuidv7.Nil, false
+			}
+		case f.hyphens && (offset == 8 || offset == 13 || offset == 18 || offset == 23):
+			if got != '-' {
+				return uuidv7.Nil, false
+			}
+		default:
+			digits = append(digits, got)
+		}
+	}
+	raw, err := hex.DecodeString(string(digits))
+	if err != nil {
+		return uuidv7.Nil, false
+	}
+	return uuidv7.UUID(raw), true
+}
+
 // TestFromStringNeverPanics verifica que nenhuma entrada malformada de 36
-// caracteres provoca pânico. Toda mutação de um único byte sobre uma
-// string canônica deve devolver ErrInvalidFormat ou um UUID válido.
+// caracteres provoca pânico e, sobre as mesmas 36 x 256 mutações de um
+// único byte, que FromString aceita exatamente as que mantêm a forma
+// canônica, com o valor que o oráculo expectMutation decodifica por conta
+// própria. Conferir só a ausência de pânico deixava passar um analisador
+// que aceitasse 'G' ou ':' como dígito: uma campanha de mutação mostrou os
+// dois defeitos sem nenhuma falha.
 //
 // REGRESSÃO: antes da correção, um hífen colocado nos deslocamentos
 // pares do último grupo (24, 26, 28, 30, 32 e 34) fazia o laço de
@@ -56,10 +121,57 @@ func TestFromStringNeverPanics(t *testing.T) {
 			mutated[i] = byte(c)
 			s := string(mutated)
 
-			_, panicked, _ := safeFromString(s)
+			u, panicked, err := safeFromString(s)
 			if panicked != nil {
 				t.Fatalf("FromString entrou em pânico na posição %d com o byte %#x (%q): %v",
 					i, c, s, panicked)
+			}
+			want, accept := expectMutation(canonicalForm, i, byte(c))
+			if accept != (err == nil) || u != want {
+				t.Fatalf("FromString(%q), posição %d, byte %#x: devolveu %s com erro %v; esperado aceitar = %v, com %s",
+					s, i, c, u, err, accept, want)
+			}
+		}
+	}
+}
+
+// TestParseSingleByteMutations estende a varredura de mutações de um byte
+// às quatro formas do analisador permissivo, com o oráculo exato de
+// expectMutation: Parse, ParseBytes e Validate aceitam exatamente as
+// mutações que mantêm a forma válida, Parse e ParseBytes devolvem o valor
+// decodificado pelo oráculo, e toda recusa é erro de formato com o UUID
+// nulo.
+//
+// Uma campanha de mutação mostrou que Parse podia deixar de conferir o
+// hífen das posições 8 ou 23, ou os dois-pontos do prefixo URN, sem
+// nenhuma falha. Nem FuzzParse percebia: a entrada aceita volta pela forma
+// canônica ao mesmo valor, e a ida e volta é tudo o que ele confere.
+func TestParseSingleByteMutations(t *testing.T) {
+	for _, f := range textForms {
+		for p := 0; p < len(f.text); p++ {
+			for c := 0; c < 256; c++ {
+				mutated := []byte(f.text)
+				mutated[p] = byte(c)
+				want, accept := expectMutation(f, p, byte(c))
+
+				got, err := uuidv7.Parse(string(mutated))
+				switch {
+				case accept && (err != nil || got != want):
+					t.Fatalf("forma %s, posição %d, byte %#x (%q): Parse devolveu %s com erro %v, esperado %s",
+						f.name, p, c, mutated, got, err, want)
+				case !accept && (err == nil || !errors.Is(err, uuidv7.ErrInvalidFormat) || got != uuidv7.Nil):
+					t.Fatalf("forma %s, posição %d, byte %#x (%q): Parse devolveu %s com erro %v, esperado a recusa com o UUID nulo",
+						f.name, p, c, mutated, got, err)
+				}
+
+				if gotBytes, errBytes := uuidv7.ParseBytes(mutated); gotBytes != got || (errBytes == nil) != (err == nil) {
+					t.Fatalf("forma %s, posição %d, byte %#x: ParseBytes devolveu %s com erro %v, e Parse %s com erro %v",
+						f.name, p, c, gotBytes, errBytes, got, err)
+				}
+				if errValidate := uuidv7.Validate(string(mutated)); (errValidate == nil) != (err == nil) {
+					t.Fatalf("forma %s, posição %d, byte %#x: Validate devolveu %v, e Parse %v",
+						f.name, p, c, errValidate, err)
+				}
 			}
 		}
 	}

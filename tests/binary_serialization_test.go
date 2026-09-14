@@ -2,7 +2,9 @@ package tests
 
 import (
 	"bytes"
+	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/patrickbrandao/go-loghub-uuidv7"
@@ -339,4 +341,86 @@ func TestNullBinaryUUIDInStructJSON(t *testing.T) {
 			t.Errorf("ida e volta devolveu %+v, esperado %+v", lido.ID, original.ID)
 		}
 	})
+}
+
+// ---------- Comprimento e encoding/gob ----------
+
+// TestBinaryDecodersRejectEveryOtherLength confere que a construção e as
+// desserializações binárias recusam todo comprimento diferente de 16, de 0
+// a 64 bytes, com ErrInvalidLength e sem alterar o receptor. Os testes
+// anteriores usavam só 10 e 15 bytes, e uma campanha de mutação mostrou que
+// aceitar 17 ou mais em silêncio, descartando o excedente, passava pela
+// suíte. Nos tipos anuláveis a entrada vazia é ausência de valor
+// (docs/SPEC.md seção 8) e fica fora da recusa.
+func TestBinaryDecodersRejectEveryOtherLength(t *testing.T) {
+	reference := uuidv7.MustParse(amostraCanonica)
+	for n := 0; n <= 64; n++ {
+		if n == 16 {
+			continue
+		}
+		data := bytes.Repeat([]byte{0xA5}, n)
+
+		if got, err := uuidv7.FromBytes(data); !errors.Is(err, uuidv7.ErrInvalidLength) || got != uuidv7.Nil {
+			t.Errorf("FromBytes com %d bytes: %s, erro %v; esperado ErrInvalidLength com o UUID nulo", n, got, err)
+		}
+		u := reference
+		if err := u.UnmarshalBinary(data); !errors.Is(err, uuidv7.ErrInvalidLength) || u != reference {
+			t.Errorf("UUID.UnmarshalBinary com %d bytes: erro %v, receptor %s", n, err, u)
+		}
+		b := uuidv7.BinaryUUID(reference)
+		if err := b.UnmarshalBinary(data); !errors.Is(err, uuidv7.ErrInvalidLength) || uuidv7.UUID(b) != reference {
+			t.Errorf("BinaryUUID.UnmarshalBinary com %d bytes: erro %v, receptor %s", n, err, b)
+		}
+		if n == 0 {
+			continue
+		}
+		present := uuidv7.NullUUID{UUID: reference, Valid: true}
+		nu := present
+		if err := nu.UnmarshalBinary(data); !errors.Is(err, uuidv7.ErrInvalidLength) || nu != present {
+			t.Errorf("NullUUID.UnmarshalBinary com %d bytes: erro %v, receptor %+v", n, err, nu)
+		}
+		nb := uuidv7.NullBinaryUUID(present)
+		if err := nb.UnmarshalBinary(data); !errors.Is(err, uuidv7.ErrInvalidLength) || nb != uuidv7.NullBinaryUUID(present) {
+			t.Errorf("NullBinaryUUID.UnmarshalBinary com %d bytes: erro %v, receptor %+v", n, err, nb)
+		}
+	}
+}
+
+// TestGobRoundTrip confere a ida e volta por encoding/gob, que usa
+// MarshalBinary e UnmarshalBinary, dos quatro tipos dentro de uma
+// estrutura: com valor, sem valor e com o UUID nulo presente. A
+// documentação de uso afirma esse caminho, e nenhum teste o exercitava. A
+// leitura é sempre sobre um valor novo, porque o gob omite os campos com
+// valor zero e não os limpa num destino reaproveitado.
+func TestGobRoundTrip(t *testing.T) {
+	type record struct {
+		ID             uuidv7.UUID
+		Parent         uuidv7.NullUUID
+		Binary         uuidv7.BinaryUUID
+		NullableBinary uuidv7.NullBinaryUUID
+	}
+	reference := uuidv7.MustParse(amostraCanonica)
+	cases := map[string]record{
+		"com valor": {
+			ID:             reference,
+			Parent:         uuidv7.NullUUID{UUID: reference, Valid: true},
+			Binary:         uuidv7.BinaryUUID(reference),
+			NullableBinary: uuidv7.NullBinaryUUID{UUID: reference, Valid: true},
+		},
+		"sem valor":          {ID: reference},
+		"UUID nulo presente": {Parent: uuidv7.NullUUID{Valid: true}, NullableBinary: uuidv7.NullBinaryUUID{Valid: true}},
+	}
+	for name, original := range cases {
+		var buf bytes.Buffer
+		if err := gob.NewEncoder(&buf).Encode(original); err != nil {
+			t.Fatalf("%s: gob.Encode devolveu erro: %v", name, err)
+		}
+		var decoded record
+		if err := gob.NewDecoder(&buf).Decode(&decoded); err != nil {
+			t.Fatalf("%s: gob.Decode devolveu erro: %v", name, err)
+		}
+		if decoded != original {
+			t.Errorf("%s: ida e volta devolveu %+v, esperado %+v", name, decoded, original)
+		}
+	}
 }

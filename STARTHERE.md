@@ -71,11 +71,12 @@ go-loghub-uuidv7/
     ├── generation_test.go      # testes funcionais
     ├── timestamp_test.go       # leituras de tempo, vetor da RFC 9562 e recusa de outras versões
     ├── api_test.go             # análise, serialização, SQL, erros e entropia
-    ├── parsing_test.go         # robustez de FromString/String
+    ├── parsing_test.go         # FromString/String e o oráculo exato das mutações de um byte
     ├── layout_test.go          # layout de bits com entropia determinística
+    ├── entropy_test.go         # fiação da entropia: palavras, leitor, crypto/rand e independência
     ├── import_test.go          # extração das propriedades de tempo
     ├── ordering_test.go        # ordenação, unicidade e concorrência
-    ├── robustness_test.go      # bordas do Generator e consumo de entropia
+    ├── robustness_test.go      # bordas do Generator, consumo de entropia e nível de cada forma de gerar
     ├── alloc_test.go           # travas de alocação
     ├── bounds_test.go          # fronteiras de tempo: MinAt, MaxAt e RangeAt
     ├── construct_test.go       # geração por instante explícito: GenerateAt

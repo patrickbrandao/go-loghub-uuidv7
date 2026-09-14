@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/patrickbrandao/go-loghub-uuidv7"
 )
@@ -417,6 +419,117 @@ func TestIsValid(t *testing.T) {
 
 	if uuidv7.Nil.IsValid() || allOnes.IsValid() {
 		t.Error("IsValid deveria recusar o nulo e o UUID com todos os bits em um")
+	}
+}
+
+// TestVersionAndVariantReadTheirBits confere que Version e Variant leem os
+// campos como estão, para qualquer valor, e não só nos UUIDv7 que a
+// biblioteca produz (docs/SPEC.md seção 7). Nenhum teste chamava os dois
+// sobre um UUID de outra versão, e uma campanha de mutação mostrou que um
+// Version com 7 fixo, ou um Variant com 2 fixo, passava pela suíte inteira.
+// Os demais bits do byte não podem interferir: cada valor é conferido sobre
+// o UUID nulo e sobre o UUID com todos os bits em um.
+func TestVersionAndVariantReadTheirBits(t *testing.T) {
+	for _, base := range []uuidv7.UUID{uuidv7.Nil, allOnes} {
+		for version := 0; version < 16; version++ {
+			u := base
+			u[6] = u[6]&0x0F | byte(version)<<4
+			if got := u.Version(); got != byte(version) {
+				t.Errorf("byte 6 = %#02x: Version = %d, esperado %d", u[6], got, version)
+			}
+		}
+		for variant := 0; variant < 4; variant++ {
+			u := base
+			u[8] = u[8]&0x3F | byte(variant)<<6
+			if got := u.Variant(); got != byte(variant) {
+				t.Errorf("byte 8 = %#02x: Variant = %d, esperado %d", u[8], got, variant)
+			}
+		}
+	}
+}
+
+// TestCompareAndIsZeroSeeEveryByte confere que Compare e IsZero olham as 16
+// posições. Os testes de ordenação comparam UUIDs que já diferem nos
+// primeiros bytes, e os de IsZero usam valores que diferem do nulo logo no
+// primeiro: uma campanha de mutação mostrou que um Compare que ignorasse o
+// último byte, ou um IsZero que só olhasse as pontas, passava pela suíte.
+// Cada posição é conferida sozinha, com os demais bytes em zero e em um, e
+// com 0x7f contra 0x80, que também pega comparação com sinal.
+func TestCompareAndIsZeroSeeEveryByte(t *testing.T) {
+	for i := 0; i < 16; i++ {
+		for _, base := range []uuidv7.UUID{uuidv7.Nil, allOnes} {
+			lower, upper := base, base
+			lower[i], upper[i] = 0x7F, 0x80
+			if got := lower.Compare(upper); got != -1 {
+				t.Errorf("byte %d, 0x7f contra 0x80: Compare = %d, esperado -1", i, got)
+			}
+			if got := upper.Compare(lower); got != 1 {
+				t.Errorf("byte %d, 0x80 contra 0x7f: Compare = %d, esperado 1", i, got)
+			}
+			if got := upper.Compare(upper); got != 0 {
+				t.Errorf("byte %d: Compare de um valor com ele mesmo = %d, esperado 0", i, got)
+			}
+		}
+
+		var single uuidv7.UUID
+		single[i] = 0x01
+		if single.IsZero() {
+			t.Errorf("IsZero devolveu verdadeiro com o byte %d diferente de zero", i)
+		}
+	}
+
+	// O menor UUIDv7 que existe começa e termina em zero, e não é o nulo:
+	// a versão e a variante ficam no meio.
+	if uuidv7.MinAt(uuidv7.Level1, time.Unix(0, 0)).IsZero() {
+		t.Error("IsZero devolveu verdadeiro para a fronteira mínima da época, que é UUIDv7")
+	}
+}
+
+// safeMustParse executa MustParse capturando o pânico, para que uma recusa
+// indevida apareça como falha do caso e não derrube a suíte.
+func safeMustParse(s string) (u uuidv7.UUID, panicked any) {
+	defer func() { panicked = recover() }()
+	return uuidv7.MustParse(s), nil
+}
+
+// TestScanAndMustParseAcceptEveryParseFormat confere o que a documentação
+// de Scan e de MustParse promete (docs/SPEC.md seções 6.3 e 8): qualquer
+// formato aceito por Parse, e não só o canônico. Os testes de banco e de
+// MustParse usavam só a forma canônica, e uma campanha de mutação mostrou
+// que restringir os dois a ela passava pela suíte. A leitura de banco é
+// conferida nos quatro tipos, com o texto em string e em fatia de bytes.
+func TestScanAndMustParseAcceptEveryParseFormat(t *testing.T) {
+	reference := uuidv7.MustParse(canonical)
+	forms := map[string]string{
+		"canônica":        canonical,
+		"maiúsculas":      strings.ToUpper(canonical),
+		"entre chaves":    "{" + canonical + "}",
+		"URN":             "urn:uuid:" + canonical,
+		"URN maiúsculo":   "URN:UUID:" + canonical,
+		"hexadecimal cru": strings.ReplaceAll(canonical, "-", ""),
+	}
+	for name, text := range forms {
+		if got, panicked := safeMustParse(text); panicked != nil || got != reference {
+			t.Errorf("MustParse(%s): %s, pânico %v; esperado %s", name, got, panicked, reference)
+		}
+		for _, src := range []any{text, []byte(text)} {
+			var u uuidv7.UUID
+			if err := u.Scan(src); err != nil || u != reference {
+				t.Errorf("UUID.Scan(%s, %T): %s, erro %v", name, src, u, err)
+			}
+			var b uuidv7.BinaryUUID
+			if err := b.Scan(src); err != nil || uuidv7.UUID(b) != reference {
+				t.Errorf("BinaryUUID.Scan(%s, %T): %s, erro %v", name, src, b, err)
+			}
+			var n uuidv7.NullUUID
+			if err := n.Scan(src); err != nil || !n.Valid || n.UUID != reference {
+				t.Errorf("NullUUID.Scan(%s, %T): %+v, erro %v", name, src, n, err)
+			}
+			var nb uuidv7.NullBinaryUUID
+			if err := nb.Scan(src); err != nil || !nb.Valid || nb.UUID != reference {
+				t.Errorf("NullBinaryUUID.Scan(%s, %T): %+v, erro %v", name, src, nb, err)
+			}
+		}
 	}
 }
 
@@ -912,7 +1025,12 @@ func TestErrorTaxonomy(t *testing.T) {
 		{"string curta", `"abc"`, "comprimento"},
 		{"string com chaves trocadas", `"(` + canonical + `)"`, "chaves"},
 		{"string com prefixo URN inválido", `"urn:uiid:` + canonical + `"`, "sentinela puro"},
-		{"string com escape e dígito inválido", `"0192f7c5-1a2b-7c3d-8e4f-aabbccddeefg"`, "sentinela puro"},
+		{"string com dígito inválido", `"0192f7c5-1a2b-7c3d-8e4f-aabbccddeefg"`, "sentinela puro"},
+		// Com barra invertida a leitura passa pelo encoding/json antes de
+		// Parse, e o erro específico de Parse precisa sobreviver ao desvio.
+		{"string com escape e comprimento errado", `"\u0030bc"`, "comprimento"},
+		{"string com escape e chaves trocadas", `"(\u0030` + canonical[1:] + `)"`, "chaves"},
+		{"string com escape e dígito inválido", `"\u0030` + canonical[1:35] + `g"`, "sentinela puro"},
 	} {
 		n := uuidv7.NullUUID{UUID: reference, Valid: true}
 		if err := n.UnmarshalJSON([]byte(c.input)); classe(err) != c.want || n.UUID != reference || !n.Valid {

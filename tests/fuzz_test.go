@@ -64,7 +64,8 @@ func FuzzFromString(f *testing.F) {
 }
 
 // FuzzParse procura entradas que façam o analisador permissivo entrar em
-// pânico ou aceitar algo que não sobreviva ao round-trip.
+// pânico, aceitar algo que não seja uma das quatro formas do valor lido, ou
+// aceitar algo que não sobreviva ao round-trip.
 //
 // Vale mais que FuzzFromString porque Parse tem quatro caminhos e usa
 // aritmética de índice — recortes como v[9:] e v[1:37] só são seguros
@@ -108,6 +109,22 @@ func FuzzParse(f *testing.F) {
 				t.Fatalf("Parse(%q): erro %v não é reconhecível como ErrInvalidFormat", s, err)
 			}
 			return
+		}
+
+		// Se aceitou, a entrada é, sem distinção de caixa, exatamente uma das
+		// quatro formas escritas a partir do valor lido. A ida e volta sozinha
+		// não percebe um hífen ou um dois-pontos que deixaram de ser
+		// conferidos: a entrada aceita indevidamente volta ao mesmo valor.
+		canon := u.String()
+		matched := false
+		for _, form := range []string{canon, "{" + canon + "}", "urn:uuid:" + canon, strings.ReplaceAll(canon, "-", "")} {
+			if strings.EqualFold(s, form) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			t.Fatalf("Parse(%q) aceitou uma entrada que não é nenhuma das quatro formas de %s", s, canon)
 		}
 
 		// Se aceitou, as três reemissões precisam voltar ao mesmo valor.

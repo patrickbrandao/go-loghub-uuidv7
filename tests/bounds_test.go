@@ -240,6 +240,85 @@ func TestBoundsSaturateAboveRange(t *testing.T) {
 	}
 }
 
+// TestBoundsExactValuesAtTheTopOfTheRange trava os valores exatos em volta
+// do teto de 48 bits, onde a saturação começa. Os testes de monotonicidade
+// e de saturação conferem a ordem e o valor saturado, mas não o ponto em
+// que a saturação entra: uma campanha de mutação mostrou que saturar desde
+// o início do último segundo representável, ou já no último milissegundo,
+// preserva a ordem e passava pela suíte. Cada linha confere as duas
+// fronteiras nos três níveis, a geração por instante com entropia nula, que
+// usa a mesma decomposição, e a leitura por nível do valor produzido.
+//
+// Os vetores foram calculados por uma implementação independente, a partir
+// das seções 3.2 e 3.5 de docs/SPEC.md.
+func TestBoundsExactValuesAtTheTopOfTheRange(t *testing.T) {
+	// Segundos Unix de 10889-08-02T05:31:50Z, o último segundo cujo
+	// milissegundo inicial cabe em 48 bits.
+	const lastSecond = int64(281_474_976_710)
+	cases := []struct {
+		name     string
+		instant  time.Time
+		min, max [3]string        // níveis 1, 2 e 3
+		readBack [3]time.Duration // o que a leitura por nível soma a lastSecond
+	}{
+		{
+			"início do último segundo, 10889-08-02T05:31:50Z",
+			time.Unix(lastSecond, 0),
+			[3]string{"ffffffff-fd70-7000-8000-000000000000", "ffffffff-fd70-7000-8000-000000000000", "ffffffff-fd70-7000-8000-000000000000"},
+			[3]string{"ffffffff-fd70-7fff-bfff-ffffffffffff", "ffffffff-fd70-7000-bfff-ffffffffffff", "ffffffff-fd70-7000-800f-ffffffffffff"},
+			[3]time.Duration{0, 0, 0},
+		},
+		{
+			"último milissegundo, 10889-08-02T05:31:50.655Z",
+			time.Unix(lastSecond, 655_000_000),
+			[3]string{"ffffffff-ffff-7000-8000-000000000000", "ffffffff-ffff-7000-8000-000000000000", "ffffffff-ffff-7000-8000-000000000000"},
+			[3]string{"ffffffff-ffff-7fff-bfff-ffffffffffff", "ffffffff-ffff-7000-bfff-ffffffffffff", "ffffffff-ffff-7000-800f-ffffffffffff"},
+			[3]time.Duration{655 * time.Millisecond, 655 * time.Millisecond, 655 * time.Millisecond},
+		},
+		{
+			"dentro do último milissegundo, 10889-08-02T05:31:50.655456789Z",
+			time.Unix(lastSecond, 655_456_789),
+			[3]string{"ffffffff-ffff-7000-8000-000000000000", "ffffffff-ffff-71c8-8000-000000000000", "ffffffff-ffff-71c8-b150-000000000000"},
+			[3]string{"ffffffff-ffff-7fff-bfff-ffffffffffff", "ffffffff-ffff-71c8-bfff-ffffffffffff", "ffffffff-ffff-71c8-b15f-ffffffffffff"},
+			[3]time.Duration{655 * time.Millisecond, 655_456 * time.Microsecond, 655_456_789 * time.Nanosecond},
+		},
+		{
+			"primeiro milissegundo acima da faixa, saturado",
+			time.Unix(lastSecond, 656_000_000),
+			[3]string{"ffffffff-ffff-7000-8000-000000000000", "ffffffff-ffff-73e7-8000-000000000000", "ffffffff-ffff-73e7-be70-000000000000"},
+			[3]string{"ffffffff-ffff-7fff-bfff-ffffffffffff", "ffffffff-ffff-73e7-bfff-ffffffffffff", "ffffffff-ffff-73e7-be7f-ffffffffffff"},
+			[3]time.Duration{655 * time.Millisecond, 655_999 * time.Microsecond, 655_999_999 * time.Nanosecond},
+		},
+		{
+			"primeiro segundo acima da faixa, saturado pela guarda dos segundos",
+			time.Unix(lastSecond+1, 0),
+			[3]string{"ffffffff-ffff-7000-8000-000000000000", "ffffffff-ffff-73e7-8000-000000000000", "ffffffff-ffff-73e7-be70-000000000000"},
+			[3]string{"ffffffff-ffff-7fff-bfff-ffffffffffff", "ffffffff-ffff-73e7-bfff-ffffffffffff", "ffffffff-ffff-73e7-be7f-ffffffffffff"},
+			[3]time.Duration{655 * time.Millisecond, 655_999 * time.Microsecond, 655_999_999 * time.Nanosecond},
+		},
+	}
+	zeroEntropy := uuidv7.NewGeneratorWith(constantSource(0))
+	for _, c := range cases {
+		for i, level := range allLevels {
+			lo, hi := uuidv7.MinAt(level, c.instant), uuidv7.MaxAt(level, c.instant)
+			if lo.String() != c.min[i] {
+				t.Errorf("%s, nível %d: MinAt = %s, esperado %s", c.name, level, lo, c.min[i])
+			}
+			if hi.String() != c.max[i] {
+				t.Errorf("%s, nível %d: MaxAt = %s, esperado %s", c.name, level, hi, c.max[i])
+			}
+			if got := zeroEntropy.GenerateAt(level, c.instant); got.String() != c.min[i] {
+				t.Errorf("%s, nível %d: GenerateAt com entropia nula = %s, esperado %s", c.name, level, got, c.min[i])
+			}
+			want := time.Unix(lastSecond, 0).UTC().Add(c.readBack[i])
+			if got, ok := lo.TimestampWithLevel(level); !ok || !got.Equal(want) {
+				t.Errorf("%s, nível %d: leitura da fronteira = %s, %v; esperado %s",
+					c.name, level, got.Format(time.RFC3339Nano), ok, want.Format(time.RFC3339Nano))
+			}
+		}
+	}
+}
+
 // TestBoundsMillisecondTurn confere a virada de milissegundo: o último
 // nanossegundo de um milissegundo e o primeiro do seguinte produzem
 // fronteiras em ordem estrita, e no Nível 1 a fronteira inferior do

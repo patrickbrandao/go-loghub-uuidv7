@@ -9,7 +9,8 @@ import "slices"
 // São elas que decidem o formato gravado. Por MarshalText, encoding/json
 // grava o UUID como a string canônica entre aspas; sem ele, gravaria uma
 // lista de 16 números, porque o tipo é um vetor de bytes. encoding/gob usa
-// MarshalBinary e grava os 16 bytes. Ver docs/SPEC.md seção 8.
+// MarshalBinary e grava os 16 bytes. Ver docs/06-serializacao-e-banco.md
+// seção 1.
 
 // encodeHex escreve a forma canônica 8-4-4-4-12 nos 36 primeiros bytes de
 // dst, que precisa ter ao menos esse tamanho.

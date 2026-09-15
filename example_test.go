@@ -8,11 +8,11 @@ package uuidv7_test
 // importa a biblioteca pelo caminho do módulo, como um consumidor faria, e
 // não tem acesso a nada interno.
 //
-// Cada exemplo reproduz um trecho de README.md, docs/DEPLOY-FAST.md ou
-// docs/DEPLOY-FULL.md, para que a documentação seja compilada e executada
-// pela suíte. Os exemplos com saída verificável (comentário "Output:")
-// usam apenas valores fixos; os que dependem do relógio ou de
-// aleatoriedade não declaram saída e servem só para compilar o uso.
+// Cada exemplo reproduz um trecho de README.md ou de skill/SKILL.md, para
+// que a documentação seja compilada e executada pela suíte. Os exemplos
+// com saída verificável (comentário "Output:") usam apenas valores fixos;
+// os que dependem do relógio ou de aleatoriedade não declaram saída e
+// servem só para compilar o uso.
 
 import (
 	"encoding/json"

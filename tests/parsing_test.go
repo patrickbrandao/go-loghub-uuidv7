@@ -11,7 +11,8 @@ import (
 
 // canonical é uma string de UUIDv7 válida usada como base para mutações.
 // Os campos abaixo do milissegundo estão fora da faixa de 0 a 999, o que a
-// torna também o vetor da extração cega (docs/SPEC.md seção 10).
+// torna também o vetor da extração cega (docs/08-casos-de-teste.md,
+// caso 13).
 const canonical = "0192f7c5-1a2b-7c3d-8e4f-aabbccddeeff"
 
 // allOnes é o UUID com os 128 bits em um. Não é UUIDv7 (versão 15,

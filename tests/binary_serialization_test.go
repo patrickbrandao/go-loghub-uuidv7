@@ -127,7 +127,8 @@ func TestNullBinaryUUIDJSONWithValue(t *testing.T) {
 }
 
 // TestNullBinaryUUIDJSONAbsent confere que ausência produz o literal
-// null, conforme a tabela normativa da SPEC §8.
+// null, conforme a tabela normativa de docs/06-serializacao-e-banco.md
+// seção 4.
 func TestNullBinaryUUIDJSONAbsent(t *testing.T) {
 	n := uuidv7.NullBinaryUUID{Valid: false}
 
@@ -351,7 +352,7 @@ func TestNullBinaryUUIDInStructJSON(t *testing.T) {
 // anteriores usavam só 10 e 15 bytes, e uma campanha de mutação mostrou que
 // aceitar 17 ou mais em silêncio, descartando o excedente, passava pela
 // suíte. Nos tipos anuláveis a entrada vazia é ausência de valor
-// (docs/SPEC.md seção 8) e fica fora da recusa.
+// (docs/06-serializacao-e-banco.md seção 4) e fica fora da recusa.
 func TestBinaryDecodersRejectEveryOtherLength(t *testing.T) {
 	reference := uuidv7.MustParse(amostraCanonica)
 	for n := 0; n <= 64; n++ {

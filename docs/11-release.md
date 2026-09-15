@@ -1,4 +1,4 @@
-# Guia de release
+# 11. Guia de release
 
 Procedimento para publicar uma versão da biblioteca: da verificação do
 commit até a confirmação de que o proxy de módulos entrega a tag nova.
@@ -9,7 +9,8 @@ autenticada.
 Substitua `vX.Y.Z` pela versão a publicar. As versões seguem o
 versionamento semântico: correção sem mudança de comportamento incrementa
 o último número; mudança de comportamento ou API nova incrementa o do
-meio enquanto a versão principal for zero.
+meio enquanto a versão principal for zero. O projeto permanece em `v0.x`
+até a superfície pública assentar ([10-decisoes.md](10-decisoes.md) §3).
 
 ---
 
@@ -60,7 +61,9 @@ git push origin vX.Y.Z
 gh release create vX.Y.Z --title "vX.Y.Z" --generate-notes
 ```
 
-O push da tag dispara o fluxo `test` mais uma vez, agora sobre a tag.
+O push da tag dispara o fluxo `test` mais uma vez, agora sobre a tag, e
+também o fluxo `test-os` ([09-testes-e-benchmark.md](09-testes-e-benchmark.md)
+§7).
 
 ## 3. Verificar a publicação
 
@@ -89,7 +92,7 @@ Nunca mova, apague ou recrie uma tag já enviada (`git tag -f`,
 conteúdo e o resumo criptográfico de cada versão no momento em que ela é
 buscada pela primeira vez; uma tag reapontada faz o `go get` dos usuários
 falhar com erro de verificação de soma, e não há como corrigir isso do
-lado do servidor.
+lado do servidor (armadilha 10 de [07-armadilhas.md](07-armadilhas.md)).
 
 Se algo sair errado depois do push da tag, a correção é uma versão nova
 (`vX.Y.Z+1`), com a entrada correspondente no `CHANGELOG.md`.

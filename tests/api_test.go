@@ -111,7 +111,7 @@ func TestInvalidLengthIsDistinguishable(t *testing.T) {
 // TestFromStringReturnsBareSentinel trava o contrato do analisador
 // estrito: FromString devolve exatamente ErrInvalidFormat em toda recusa,
 // inclusive para quem compara com o operador de igualdade em vez de
-// errors.Is (docs/SPEC.md seção 6.4).
+// errors.Is (docs/05-conversao-e-analise.md seção 5).
 func TestFromStringReturnsBareSentinel(t *testing.T) {
 	for _, input := range []string{"", "curto", canonical + "x", "0192f7c5+1a2b-7c3d-8e4f-aabbccddeeff"} {
 		if _, err := uuidv7.FromString(input); err != uuidv7.ErrInvalidFormat { //nolint:errorlint // a comparação direta é o próprio contrato testado
@@ -424,9 +424,10 @@ func TestIsValid(t *testing.T) {
 
 // TestVersionAndVariantReadTheirBits confere que Version e Variant leem os
 // campos como estão, para qualquer valor, e não só nos UUIDv7 que a
-// biblioteca produz (docs/SPEC.md seção 7). Nenhum teste chamava os dois
-// sobre um UUID de outra versão, e uma campanha de mutação mostrou que um
-// Version com 7 fixo, ou um Variant com 2 fixo, passava pela suíte inteira.
+// biblioteca produz (docs/03-leitura-do-instante.md seção 5). Nenhum
+// teste chamava os dois sobre um UUID de outra versão, e uma campanha de
+// mutação mostrou que um Version com 7 fixo, ou um Variant com 2 fixo,
+// passava pela suíte inteira.
 // Os demais bits do byte não podem interferir: cada valor é conferido sobre
 // o UUID nulo e sobre o UUID com todos os bits em um.
 func TestVersionAndVariantReadTheirBits(t *testing.T) {
@@ -493,7 +494,8 @@ func safeMustParse(s string) (u uuidv7.UUID, panicked any) {
 }
 
 // TestScanAndMustParseAcceptEveryParseFormat confere o que a documentação
-// de Scan e de MustParse promete (docs/SPEC.md seções 6.3 e 8): qualquer
+// de Scan e de MustParse promete (docs/05-conversao-e-analise.md seção 4 e
+// docs/06-serializacao-e-banco.md seção 3): qualquer
 // formato aceito por Parse, e não só o canônico. Os testes de banco e de
 // MustParse usavam só a forma canônica, e uma campanha de mutação mostrou
 // que restringir os dois a ela passava pela suíte. A leitura de banco é
@@ -862,7 +864,8 @@ func TestNullUUIDTextAndBinary(t *testing.T) {
 // futura tenha de passar por aqui.
 //
 // Os três desserializadores (JSON, texto e binário) preservam o receptor
-// inteiro, seguindo a regra mestra de docs/SPEC.md seção 6.4. Scan é a
+// inteiro, seguindo a regra mestra de
+// docs/05-conversao-e-analise.md seção 5. Scan é a
 // exceção registrada: preserva o identificador e derruba o booleano,
 // porque database/sql reaproveita o mesmo destino a cada linha e um
 // chamador que ignore o erro leria o valor da linha anterior.
@@ -927,7 +930,8 @@ func TestMustPropagatesError(t *testing.T) {
 	t.Error("Must deveria ter entrado em pânico")
 }
 
-// TestErrorTaxonomy percorre a tabela da seção 6.4 da especificação: cada
+// TestErrorTaxonomy percorre a tabela de docs/05-conversao-e-analise.md
+// seção 5: cada
 // entrada produz o erro descrito, reconhecido pelo tipo e não só pela
 // presença; o UUID devolvido é o nulo; o analisador estrito e Import
 // devolvem exatamente o sentinela; a assimetria registrada do prefixo URN,

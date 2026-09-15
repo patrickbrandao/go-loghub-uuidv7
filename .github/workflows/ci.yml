@@ -246,7 +246,7 @@ jobs:
         # O Go grava a entrada que quebrou o alvo em
         # tests/testdata/fuzz/<Alvo>/<hash>. Sem este passo ela morre com o
         # runner. O procedimento de reprodução está em
-        # docs/TEST-AND-BENCHMARK.md.
+        # docs/09-testes-e-benchmark.md.
         if: always()
         uses: actions/upload-artifact@v7
         with:

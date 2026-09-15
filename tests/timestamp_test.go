@@ -73,8 +73,9 @@ func TestTimestampRoundTrip(t *testing.T) {
 
 // TestTimeReadingsReturnUTC confere que as duas leituras de instante
 // devolvem UTC em todos os níveis, inclusive nos desconhecidos e no caminho
-// do descarte por faixa (docs/SPEC.md seção 7). A comparação é pela
-// identidade de time.UTC, e não pelo nome do fuso: numa máquina com TZ=UTC,
+// do descarte por faixa (docs/03-leitura-do-instante.md seção 3). A
+// comparação é pela identidade de time.UTC, e não pelo nome do fuso: numa
+// máquina com TZ=UTC,
 // como os runners da integração contínua, o fuso local também se chama
 // "UTC". Antes deste teste só TestTimestampRoundTrip conferia o fuso, e só
 // de Timestamp; uma campanha de mutação mostrou que TimestampWithLevel podia
@@ -133,7 +134,7 @@ func TestTimestampWithLevelRecoversSubMillisecond(t *testing.T) {
 // TestTimestampWithLevelDiscardsOutOfRangeFields confere que, quando os
 // campos sub-milissegundo denunciam bits aleatórios (fora de 0..999),
 // TimestampWithLevel devolve apenas o milissegundo, sem somar o campo que
-// por acaso ainda caiba na faixa (docs/SPEC.md seção 7).
+// por acaso ainda caiba na faixa (docs/03-leitura-do-instante.md seção 3).
 func TestTimestampWithLevelDiscardsOutOfRangeFields(t *testing.T) {
 	// UUIDv7 montado à mão: rand_a = 0xFFF (4095, fora da faixa) e
 	// topo de rand_b = 5 nanossegundos (dentro da faixa).

@@ -4,7 +4,7 @@ package uuidv7
 // de teste autorizados na raiz, e cobre o que não pode ser exercitado de
 // fora do pacote: as bordas de splitUnixInstant (antes de 1970, ano 2300,
 // viradas de milissegundo e de segundo), porque a geração lê o relógio do
-// sistema e ele não é injetável (docs/SPEC.md seção 11.2).
+// sistema e ele não é injetável (docs/10-decisoes.md seção 2).
 
 import (
 	"testing"

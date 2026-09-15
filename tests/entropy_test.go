@@ -21,8 +21,9 @@ import (
 // mesma palavra, ignorar a fonte do próprio gerador, aceitar leitura
 // curta ou deixar de usar crypto/rand passava pela suíte inteira sem
 // nenhuma falha. Os vetores exatos abaixo foram calculados por uma
-// implementação independente, escrita a partir das seções 3.1, 3.3 e 5.3
-// de docs/SPEC.md, e não pela própria biblioteca.
+// implementação independente, escrita a partir de
+// docs/01-escopo-e-layout.md seção 6 e docs/02-instante-e-entropia.md
+// seções 3 e 7, e não pela própria biblioteca.
 
 // Duas palavras com todos os nibbles distintos: qualquer troca de
 // palavra, de ordem de bytes ou de máscara muda o resultado.
@@ -60,13 +61,14 @@ func panicValue(f func()) (recovered any) {
 	return nil
 }
 
-// TestEntropyWordsFeedTheirFields trava a correspondência normativa da
-// seção 3.3: no Nível 1 e nos níveis desconhecidos, rand_a recebe os 12
-// bits baixos da primeira palavra sorteada (r1) e rand_b os 62 bits baixos
-// da segunda (r2); nos níveis 2 e 3, a única palavra sorteada alimenta
-// rand_b. Vale para a geração por instante e para a geração pelo relógio,
-// que mantêm cópias separadas do empacotamento (seção 11.2), e por isso as
-// duas são conferidas.
+// TestEntropyWordsFeedTheirFields trava a correspondência normativa de
+// docs/02-instante-e-entropia.md seção 3: no Nível 1 e nos níveis
+// desconhecidos, rand_a recebe os 12 bits baixos da primeira palavra
+// sorteada (r1) e rand_b os 62 bits baixos da segunda (r2); nos níveis 2 e
+// 3, a única palavra sorteada alimenta rand_b. Vale para a geração por
+// instante e para a geração pelo relógio, que mantêm cópias separadas do
+// empacotamento (docs/10-decisoes.md seção 2), e por isso as duas são
+// conferidas.
 func TestEntropyWordsFeedTheirFields(t *testing.T) {
 	// Por instante, os 16 bytes inteiros são conhecidos.
 	for _, c := range []struct {
@@ -110,12 +112,13 @@ func TestEntropyWordsFeedTheirFields(t *testing.T) {
 	}
 }
 
-// TestReaderGeneratorByteOrderAndShortReads trava o contrato da seção 5.3
-// para o gerador sobre io.Reader: cada palavra é formada por 8 bytes em
-// ordem de rede, o Nível 1 lê r1 antes de r2, e uma leitura curta sem erro
-// é completada, não aceita pela metade. O leitor entrega um byte por
-// chamada, então uma implementação que confiasse numa única leitura
-// ficaria com sete bytes zerados em cada palavra, em silêncio.
+// TestReaderGeneratorByteOrderAndShortReads trava o contrato de
+// docs/02-instante-e-entropia.md seção 7 para o gerador sobre io.Reader:
+// cada palavra é formada por 8 bytes em ordem de rede, o Nível 1 lê r1
+// antes de r2, e uma leitura curta sem erro é completada, não aceita pela
+// metade. O leitor entrega um byte por chamada, então uma implementação
+// que confiasse numa única leitura ficaria com sete bytes zerados em cada
+// palavra, em silêncio.
 func TestReaderGeneratorByteOrderAndShortReads(t *testing.T) {
 	// 24 bytes: 0x01 a 0x10 para o Nível 1, 0x11 a 0x18 para o Nível 3.
 	g := uuidv7.NewGeneratorWithReader(iotest.OneByteReader(bytes.NewReader(countingBytes(24))))
@@ -141,8 +144,9 @@ func TestReaderGeneratorByteOrderAndShortReads(t *testing.T) {
 // construção: o gerador precisa capturá-lo ali, e os bits gerados depois,
 // com o leitor original já restaurado, têm de ser exatamente os desse
 // leitor. Uma fonte criptográfica trocada em silêncio pela do runtime é a
-// degradação que a seção 5.2 proíbe, e nenhum outro teste a percebe,
-// porque os dois geradores produzem UUIDv7 igualmente válidos.
+// degradação que docs/02-instante-e-entropia.md seção 6 proíbe, e nenhum
+// outro teste a percebe, porque os dois geradores produzem UUIDv7
+// igualmente válidos.
 //
 // Trocar uma variável global é seguro aqui porque nenhum teste do pacote
 // usa t.Parallel. Um teste paralelo que leia crypto/rand.Reader tornaria

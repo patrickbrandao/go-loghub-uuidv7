@@ -16,15 +16,47 @@ Convenções de cada seção:
 - **Decisões**: propostas avaliadas, aceitas ou rejeitadas, com o motivo,
   para que não voltem a ser sugeridas sem argumento novo.
 
-**O registro canônico de decisões é a seção 11 do
-[docs/SPEC.md](docs/SPEC.md)**, que lista cada uma com o motivo e o que
-justificaria revê-la. Este arquivo guarda o histórico — quando cada
+**O registro canônico de decisões é
+[docs/10-decisoes.md](docs/10-decisoes.md)**, que lista cada uma com o
+motivo e o que justificaria revê-la. Este arquivo guarda o histórico — quando cada
 decisão foi tomada e o que mudou junto —, mas quem for propor ou auditar
 deve ler a especificação primeiro. Decisão nova entra nos dois lugares.
 
 ---
 
 ## [Não publicado]
+
+## [v0.0.3] — 2026-09-14
+
+### Documentação
+
+- **`docs/` reorganizada em arquivos numerados por assunto**, com
+  `docs/INDEX.md` como índice: `01-escopo-e-layout.md`,
+  `02-instante-e-entropia.md`, `03-leitura-do-instante.md`,
+  `04-construcao-por-instante.md`, `05-conversao-e-analise.md`,
+  `06-serializacao-e-banco.md`, `07-armadilhas.md`,
+  `08-casos-de-teste.md`, `09-testes-e-benchmark.md`, `10-decisoes.md` e
+  `11-release.md`. `SPEC.md`, `DEPLOY-FAST.md`, `DEPLOY-FULL.md`,
+  `TEST-AND-BENCHMARK.md` e `RELEASE.md` foram removidos: cada assunto
+  passa a viver em um único arquivo, e os demais apontam para ele em vez
+  de repetir. Nenhuma regra normativa, vetor ou medição foi alterada. A
+  numeração dos casos de teste (1 a 19) e das armadilhas (1 a 12) foi
+  preservada; as seções da antiga `SPEC.md` mudaram de arquivo, e a
+  tabela de correspondência está em `docs/INDEX.md`. As entradas
+  anteriores deste histórico continuam citando as seções antigas.
+- **Skill para agentes de IA** em `skill/`: `skill/SKILL.md` (formato
+  Agent Skills, `name: go-loghub-uuidv7`) com as regras de uso e as
+  receitas, `skill/references/` (`api.md`, `consultas-e-banco.md`,
+  `erros.md`) e nove programas executáveis em `skill/examples/`, que
+  compilam dentro do módulo e passam pelo `gofmt`, pelo `go vet` e pelo
+  `golangci-lint` do CI. Substitui os guias de uso `DEPLOY-FAST.md` e
+  `DEPLOY-FULL.md`.
+- Referências a `docs/SPEC.md`, `docs/DEPLOY-*.md`,
+  `docs/TEST-AND-BENCHMARK.md` e `docs/RELEASE.md` atualizadas nos
+  comentários de `encoding.go`, `construct.go`, `version7.go`,
+  `parse.go`, `sql.go`, `example_test.go`, `instant_internal_test.go` e
+  dos testes em `tests/`, em `.github/workflows/ci.yml`, `README.md`,
+  `STARTHERE.md`, `CLAUDE.md`, `CONTRIBUTING.md` e `SECURITY.md`.
 
 ## [v0.0.2] — 2026-09-14
 
@@ -300,6 +332,7 @@ O histórico anterior à criação deste projeto — da `v0.1.0` à `v0.6.0` de
 fronteiras, à geração por instante, à política de entropia e às travas de
 alocação — está no `CHANGELOG.md` daquele repositório.
 
-[Não publicado]: https://github.com/patrickbrandao/go-loghub-uuidv7/compare/v0.0.2...HEAD
+[Não publicado]: https://github.com/patrickbrandao/go-loghub-uuidv7/compare/v0.0.3...HEAD
+[v0.0.3]: https://github.com/patrickbrandao/go-loghub-uuidv7/compare/v0.0.2...v0.0.3
 [v0.0.2]: https://github.com/patrickbrandao/go-loghub-uuidv7/compare/v0.0.1...v0.0.2
 [v0.0.1]: https://github.com/patrickbrandao/go-loghub-uuidv7/releases/tag/v0.0.1

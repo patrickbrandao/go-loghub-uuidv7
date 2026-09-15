@@ -249,8 +249,9 @@ func TestBoundsSaturateAboveRange(t *testing.T) {
 // fronteiras nos três níveis, a geração por instante com entropia nula, que
 // usa a mesma decomposição, e a leitura por nível do valor produzido.
 //
-// Os vetores foram calculados por uma implementação independente, a partir
-// das seções 3.2 e 3.5 de docs/SPEC.md.
+// Os vetores foram calculados por uma implementação independente, a partir de
+// docs/02-instante-e-entropia.md seção 1 e de
+// docs/04-construcao-por-instante.md seção 2.
 func TestBoundsExactValuesAtTheTopOfTheRange(t *testing.T) {
 	// Segundos Unix de 10889-08-02T05:31:50Z, o último segundo cujo
 	// milissegundo inicial cabe em 48 bits.

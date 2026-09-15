@@ -9,7 +9,7 @@ import (
 )
 
 // Este arquivo guarda os vetores dourados da extensão multinível,
-// publicados em docs/SPEC.md seção 10, caso obrigatório 12.
+// publicados em docs/08-casos-de-teste.md, caso 12.
 //
 // Eles são CONTRATO, não teste comum: uma implementação em outra
 // linguagem confere o próprio empacotamento contra esta tabela. Mudar
@@ -17,8 +17,9 @@ import (
 // teste. Se um destes falhar, o defeito está no código, não no vetor.
 //
 // Os valores foram calculados por uma implementação independente,
-// escrita a partir das regras das seções 3.1, 3.2 e 3.5 da
-// especificação, e só então conferidos contra esta biblioteca. Um vetor
+// escrita a partir das regras de docs/01-escopo-e-layout.md,
+// docs/02-instante-e-entropia.md e docs/04-construcao-por-instante.md,
+// e só então conferidos contra esta biblioteca. Um vetor
 // gerado pela própria implementação e conferido contra ela mesma não
 // provaria nada.
 //

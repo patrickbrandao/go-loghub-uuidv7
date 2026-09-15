@@ -39,8 +39,8 @@ Todos preservam versão 7 e variante RFC.
 Os microssegundos e os nanossegundos são gravados como contagens decimais
 de 0 a 999, e não como a fração binária do Método 3 da RFC 9562. Qualquer
 biblioteca lê o milissegundo destes identificadores; o sub-milissegundo só
-esta biblioteca, ou uma implementação de [docs/SPEC.md](docs/SPEC.md), lê
-corretamente. O motivo está na seção 11.3 da especificação.
+esta biblioteca, ou uma implementação da [especificação](docs/INDEX.md), lê
+corretamente. O motivo está em [docs/10-decisoes.md](docs/10-decisoes.md) §3.
 
 ## Gerar
 
@@ -103,7 +103,8 @@ informa, preservando a ordenação da chave.
 
 > A fronteira só vale para UUIDs gravados no **mesmo nível**. Misturar
 > níveis na mesma coluna faz a consulta devolver linhas a menos, sem erro
-> nenhum. Detalhes em [docs/DEPLOY-FULL.md](docs/DEPLOY-FULL.md).
+> nenhum. Detalhes em
+> [docs/04-construcao-por-instante.md](docs/04-construcao-por-instante.md) §3.
 
 ## Instalação
 
@@ -127,7 +128,7 @@ module uuid-test
 
 go 1.22
 
-require github.com/patrickbrandao/go-loghub-uuidv7 v0.0.2
+require github.com/patrickbrandao/go-loghub-uuidv7 v0.0.3
 ```
 
 > O `require` acima é preenchido automaticamente pelo `go get` mostrado
@@ -218,11 +219,12 @@ uso a que a biblioteca se destina — o gerador padrão é adequado.
 
 - **Mapa completo do projeto**: [STARTHERE.md](STARTHERE.md)
 - **Histórico de mudanças**: [CHANGELOG.md](CHANGELOG.md)
-- Uso rápido: [docs/DEPLOY-FAST.md](docs/DEPLOY-FAST.md)
-- Uso completo (todas as funções): [docs/DEPLOY-FULL.md](docs/DEPLOY-FULL.md)
-- Testes e benchmark: [docs/TEST-AND-BENCHMARK.md](docs/TEST-AND-BENCHMARK.md)
-- Especificação de desenvolvimento (agnóstica de linguagem):
-  [docs/SPEC.md](docs/SPEC.md)
+- **Como usar, com exemplos executáveis** (skill para agentes de IA, que
+  também serve a pessoas): [skill/SKILL.md](skill/SKILL.md)
+- **Especificação** (agnóstica de linguagem, um arquivo por assunto):
+  [docs/INDEX.md](docs/INDEX.md)
+- Testes e benchmark:
+  [docs/09-testes-e-benchmark.md](docs/09-testes-e-benchmark.md)
 - Como contribuir: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Como relatar uma vulnerabilidade: [SECURITY.md](SECURITY.md)
 

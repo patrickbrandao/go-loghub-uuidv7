@@ -80,8 +80,8 @@ func TestImportInvalidString(t *testing.T) {
 }
 
 // TestImportSubMillisecondRanges confere as faixas dos campos sub-ms por
-// nível, em centenas de milhares de amostras (docs/SPEC.md seção 10,
-// extração cega de nível).
+// nível, em centenas de milhares de amostras (docs/08-casos-de-teste.md,
+// caso 13).
 //
 // Atenção: para o Nível 1 os campos Microseconds e Nanoseconds carregam
 // bits aleatórios e NÃO respeitam a faixa 0..999 anunciada nos

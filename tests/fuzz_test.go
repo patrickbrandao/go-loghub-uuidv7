@@ -21,7 +21,7 @@ func FuzzFromString(f *testing.F) {
 	f.Add("")
 	f.Add("00000000-0000-0000-0000-000000000000")
 	f.Add("ffffffff-ffff-ffff-ffff-ffffffffffff")
-	f.Add("0192f7c5-1a2b-7c3d-8e4f--abbccddeeff") // hífen extra: armadilha 1 de docs/SPEC.md seção 9
+	f.Add("0192f7c5-1a2b-7c3d-8e4f--abbccddeeff") // hífen extra: armadilha 1 de docs/07-armadilhas.md
 	f.Add("0192f7c5-1a2b-7c3d-8e4f-aabbccddee-f")
 	f.Add(uuidv7.GenerateString(uuidv7.Level3))
 
@@ -207,8 +207,8 @@ func FuzzNullUUIDJSON(f *testing.F) {
 }
 
 // FuzzInstantArithmetic procura instantes que quebrem as invariantes da
-// construção a partir de um instante explícito: as fronteiras da seção
-// 3.5 e a geração da seção 3.6 da especificação.
+// construção a partir de um instante explícito: as fronteiras e a
+// geração de docs/04-construcao-por-instante.md.
 //
 // É o alvo que falta ao lado dos três de texto, e vale por um motivo
 // diferente deles. Ali a entrada é uma string e o risco é leitura fora
@@ -290,8 +290,8 @@ func FuzzInstantArithmetic(f *testing.F) {
 }
 
 // FuzzTimeReading procura UUIDs cuja leitura de tempo quebre as
-// invariantes da seção 7 da especificação: é o alvo do sentido inverso da
-// geração, e recebe os 16 bytes crus, sem passar por texto.
+// invariantes de docs/03-leitura-do-instante.md: é o alvo do sentido
+// inverso da geração, e recebe os 16 bytes crus, sem passar por texto.
 //
 // As invariantes valem para qualquer entrada: as leituras nunca entram em
 // pânico; todas concordam com IsValid ao aceitar ou recusar; a extração

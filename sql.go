@@ -102,11 +102,11 @@ type NullUUID struct {
 //
 // Em caso de erro o identificador não é alterado, mas o booleano cai para
 // falso. É a única exceção à regra de receptor inalterado que vale para
-// os desserializadores (docs/SPEC.md seção 6.4), e tem motivo próprio:
-// database/sql reaproveita o mesmo destino a cada linha, então um
-// chamador que ignore o erro leria o valor da linha anterior como se
-// fosse o da linha que falhou. Zerar o booleano transforma esse descuido
-// em ausência de valor, e não em dado errado.
+// os desserializadores (docs/05-conversao-e-analise.md seção 5), e tem
+// motivo próprio: database/sql reaproveita o mesmo destino a cada linha,
+// então um chamador que ignore o erro leria o valor da linha anterior
+// como se fosse o da linha que falhou. Zerar o booleano transforma esse
+// descuido em ausência de valor, e não em dado errado.
 func (n *NullUUID) Scan(src any) error {
 	if isAbsentScanValue(src) {
 		n.UUID, n.Valid = Nil, false

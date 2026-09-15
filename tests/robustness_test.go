@@ -57,8 +57,8 @@ func TestZeroGeneratorUsesDefaultEntropy(t *testing.T) {
 		}
 	}
 
-	// A tolerância é regra do tipo inteiro (docs/SPEC.md seção 5.2, caso
-	// 3): vale também para os nomes do UUIDv7, por versão e por nível, e
+	// A tolerância é regra do tipo inteiro (docs/02-instante-e-entropia.md
+	// seção 6, caso 3): vale também para os nomes do UUIDv7, por versão e por nível, e
 	// para a geração por instante, que não passa por Generate.
 	for name, g := range map[string]*uuidv7.Generator{"Generator zerado": &byValue, "ponteiro nulo": byPointer} {
 		if u := g.GenerateV7(); u.Version() != 7 || u.Variant() != 0b10 || u.IsZero() {
@@ -296,15 +296,16 @@ func TestPackageLevelShortcuts(t *testing.T) {
 // observedLevel infere em que nível uma forma de gerar grava, pela
 // assinatura estatística dos bits livres, sem precisar injetar entropia.
 // É a única prova possível para as funções de pacote, que usam o gerador
-// padrão e não aceitam fonte (docs/SPEC.md seção 11.2).
+// padrão e não aceitam fonte (docs/10-decisoes.md seção 2).
 //
-// A assinatura decorre da seção 3.1: no Nível 1, rand_a é aleatório e
-// passa de 999 em 3096 de cada 4096 amostras; nos níveis 2 e 3 carrega os
-// microssegundos e nunca passa. O topo de rand_b é aleatório no Nível 2 e
-// passa de 999 em 24 de cada 1024 amostras; no Nível 3 carrega os
-// nanossegundos e nunca passa. Com 4.000 amostras, confundir o Nível 2 com
-// o 3 tem probabilidade abaixo de 10^-41, e o Nível 1 com qualquer outro,
-// muito menor; os níveis 2 e 3 nunca são confundidos com o 1.
+// A assinatura decorre de docs/01-escopo-e-layout.md seção 6: no Nível
+// 1, rand_a é aleatório e passa de 999 em 3096 de cada 4096 amostras;
+// nos níveis 2 e 3 carrega os microssegundos e nunca passa. O topo de
+// rand_b é aleatório no Nível 2 e passa de 999 em 24 de cada 1024
+// amostras; no Nível 3 carrega os nanossegundos e nunca passa. Com 4.000
+// amostras, confundir o Nível 2 com o 3 tem probabilidade abaixo de
+// 10^-41, e o Nível 1 com qualquer outro, muito menor; os níveis 2 e 3
+// nunca são confundidos com o 1.
 func observedLevel(gen func() uuidv7.UUID) uuidv7.Level {
 	const samples = 4_000
 	randAAbove999, topBAbove999 := false, false
@@ -326,8 +327,9 @@ func observedLevel(gen func() uuidv7.UUID) uuidv7.Level {
 	return uuidv7.Level3
 }
 
-// TestEveryGenerationFormWritesItsLevel estende o caso 1 da seção 10 a
-// todas as formas de gerar. TestGenerateV7LevelNamesMatchLevels prova o
+// TestEveryGenerationFormWritesItsLevel estende o caso 1 de
+// docs/08-casos-de-teste.md a todas as formas de gerar.
+// TestGenerateV7LevelNamesMatchLevels prova o
 // nível dos nomes pelo método, com entropia injetada; as funções de pacote
 // não recebem fonte, e uma campanha de mutação mostrou que Generate,
 // GenerateString, GenerateAt e GenerateAtString podiam ignorar o nível

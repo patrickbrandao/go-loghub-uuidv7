@@ -59,12 +59,24 @@ go-loghub-uuidv7/
 ├── CONTRIBUTING.md         # convenções e verificação local para quem contribui
 ├── CLAUDE.md               # instruções de manutenção (ferramental)
 │
-├── docs/                   # documentação de uso
-│   ├── DEPLOY-FAST.md
-│   ├── DEPLOY-FULL.md
-│   ├── TEST-AND-BENCHMARK.md
-│   ├── SPEC.md             # reimplementar do zero; §4 = recusa de outras versões; §11 = decisões firmadas
-│   └── RELEASE.md          # procedimento de publicação de versão
+├── docs/                   # especificação, um arquivo por assunto; comece por INDEX.md
+│   ├── INDEX.md            # índice, caminhos de leitura, mapa da API
+│   ├── 01-escopo-e-layout.md
+│   ├── 02-instante-e-entropia.md
+│   ├── 03-leitura-do-instante.md
+│   ├── 04-construcao-por-instante.md
+│   ├── 05-conversao-e-analise.md
+│   ├── 06-serializacao-e-banco.md
+│   ├── 07-armadilhas.md
+│   ├── 08-casos-de-teste.md
+│   ├── 09-testes-e-benchmark.md
+│   ├── 10-decisoes.md      # decisões firmadas: leia antes de propor mudança
+│   └── 11-release.md       # procedimento de publicação de versão
+│
+├── skill/                  # como usar a biblioteca, para agentes de IA e pessoas
+│   ├── SKILL.md            # instruções, regras e receitas (formato Agent Skills)
+│   ├── references/         # api.md, consultas-e-banco.md, erros.md
+│   └── examples/           # nove programas executáveis: go run ./skill/examples/01-gerar
 │
 └── tests/                  # tudo que NÃO vai para produção
     ├── doc.go
@@ -99,7 +111,7 @@ e `CONTRIBUTING.md` (abas de segurança e de contribuição), `CLAUDE.md`
 teste também ficam na raiz por necessidade: `instant_internal_test.go`,
 que exercita a decomposição interna do instante, e `example_test.go`,
 cujas funções `Example` só aparecem na documentação do pacote se
-estiverem no mesmo diretório. Documentação, especificação e testes ficam
+estiverem no mesmo diretório. Documentação, especificação, skill e testes ficam
 em pastas próprias.
 
 ---
@@ -160,12 +172,12 @@ em pastas próprias.
 > Todas preservam versão 7 e variante RFC. A fronteira só vale para
 > UUIDs do **mesmo nível**: os bits abaixo do milissegundo significam
 > coisas diferentes em cada um. Ver
-> [docs/DEPLOY-FULL.md](docs/DEPLOY-FULL.md).
+> [docs/04-construcao-por-instante.md](docs/04-construcao-por-instante.md) §3.
 
 ### 3.2 Leitura do instante
 
 Todas recusam o UUID que não é de versão 7 com a variante da RFC
-(`docs/SPEC.md` seção 4).
+([docs/03-leitura-do-instante.md](docs/03-leitura-do-instante.md) §2).
 
 - `(UUID) TimestampWithLevel(Level) (time.Time, bool)` — o instante em
   UTC com a precisão do nível; descarta os campos abaixo do milissegundo
@@ -282,17 +294,19 @@ por string continua cronológica.
 
 ## 5. Caminhos de leitura recomendados
 
-- **Só quero gerar e ler o instante**: [docs/DEPLOY-FAST.md](docs/DEPLOY-FAST.md)
-- **Quero usar tudo**: [docs/DEPLOY-FULL.md](docs/DEPLOY-FULL.md)
-- **Quero medir desempenho**: [docs/TEST-AND-BENCHMARK.md](docs/TEST-AND-BENCHMARK.md)
+- **Só quero gerar e ler o instante**: [skill/SKILL.md](skill/SKILL.md)
+- **Quero usar tudo, com exemplos executáveis**:
+  [skill/SKILL.md](skill/SKILL.md) e `skill/examples/`
+- **Quero medir desempenho**:
+  [docs/09-testes-e-benchmark.md](docs/09-testes-e-benchmark.md)
 - **Quero reimplementar em outra linguagem**:
-  [docs/SPEC.md](docs/SPEC.md)
+  [docs/INDEX.md](docs/INDEX.md), arquivos 01 a 08 na ordem
 - **Quero propor uma mudança de projeto, ou vou auditar a biblioteca**:
-  [docs/SPEC.md](docs/SPEC.md) seção 11, o registro de decisões firmadas
-  — o que já foi decidido, por quê, e o que justificaria rever.
+  [docs/10-decisoes.md](docs/10-decisoes.md), o registro de decisões
+  firmadas — o que já foi decidido, por quê, e o que justificaria rever.
 - **Quero ler o código**: comece por `uuid.go` (geração), depois
   `import.go` e `inspect.go` (leitura) e `conversion.go`.
-- **Vou publicar uma versão**: [docs/RELEASE.md](docs/RELEASE.md)
+- **Vou publicar uma versão**: [docs/11-release.md](docs/11-release.md)
 - **Vou contribuir ou relatar um problema de segurança**:
   [CONTRIBUTING.md](CONTRIBUTING.md) e [SECURITY.md](SECURITY.md)
 
@@ -319,4 +333,4 @@ Em VM modesta (Xeon 2.80 GHz): geração binária ~85–98 ns/UUID com **zero
 alocações** e mais de **11 mil UUIDs/ms** por núcleo; string ~165 ns com
 1 alocação de 48 bytes. Num Apple M2, a geração fica em ~42 ns e a
 leitura dos campos de tempo em ~2,3 ns, também sem alocação. Detalhes e
-tabelas em [docs/TEST-AND-BENCHMARK.md](docs/TEST-AND-BENCHMARK.md).
+tabelas em [docs/09-testes-e-benchmark.md](docs/09-testes-e-benchmark.md) §10.

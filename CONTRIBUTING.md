@@ -8,7 +8,7 @@ ter para ser aceita. As regras completas de manutenção estão em
 
 - Abra uma issue descrevendo o problema ou a proposta antes de um pull
   request grande.
-- **Consulte antes a seção 11 do `docs/SPEC.md`**, o registro de decisões
+- **Consulte antes `docs/10-decisoes.md`**, o registro de decisões
   firmadas. Ela diz o que já foi avaliado e decidido — fonte de entropia
   do gerador padrão, ausência de contador monotônico, relógio e gerador
   padrão não injetáveis, as duplicações deliberadas de código, o escopo
@@ -36,7 +36,9 @@ ter para ser aceita. As regras completas de manutenção estão em
 - **Raiz mínima.** Só código de produção fica na raiz, ao lado de
   `go.mod`, dos documentos principais e de `.github/`. Testes ficam em
   `./tests/` e importam a biblioteca pelo caminho do módulo, como um
-  consumidor externo. As exceções na raiz são `instant_internal_test.go`
+  consumidor externo; os exemplos da skill, em `./skill/examples/`,
+  compilam pelo mesmo módulo e passam pelo mesmo linter. As exceções na
+  raiz são `instant_internal_test.go`
   (a decomposição interna do instante) e `example_test.go` (exemplos que
   o `go doc` precisa encontrar junto do pacote).
 - **Sem dependências.** Apenas a biblioteca padrão. `go.mod` fica em
@@ -67,7 +69,7 @@ go test ./tests/ -short -run 'Allocations|SingleAllocation' -v  # travas de aloc
 ```
 
 As travas de alocação são medidas sem `-race` de propósito; o motivo
-está em `CLAUDE.md` e em `docs/TEST-AND-BENCHMARK.md`.
+está em `CLAUDE.md` e em `docs/09-testes-e-benchmark.md`.
 
 A integração contínua roda esses mesmos passos no Go 1.22 e na versão
 estável, em Linux, e a suíte curta em Windows e macOS. Um pull request
@@ -88,6 +90,6 @@ só é revisado com o fluxo `test` verde.
   chamar `Parallel`.
 - Teste que só confere validade ou ida e volta onde o valor exato pode ser
   conferido. Com 100% de cobertura, uma campanha de mutação mostrou 34 de
-  45 defeitos passando por testes assim; ver a seção 10 do
-  `docs/SPEC.md`.
+  45 defeitos passando por testes assim; ver
+  `docs/08-casos-de-teste.md`.
 - Arquivos novos na raiz que não sejam código de produção.

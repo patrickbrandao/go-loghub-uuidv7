@@ -6,7 +6,7 @@ package uuidv7
 //
 // FromString e StringToBinary não os usam: devolvem exatamente
 // ErrInvalidFormat em toda recusa, inclusive para comparação direta com o
-// operador de igualdade. Ver docs/SPEC.md seção 6.4.
+// operador de igualdade. Ver docs/05-conversao-e-analise.md seção 5.
 var (
 	// ErrInvalidLength indica comprimento incompatível com todos os
 	// formatos aceitos.

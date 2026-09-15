@@ -7,9 +7,9 @@ import (
 	"github.com/patrickbrandao/go-loghub-uuidv7"
 )
 
-// Este arquivo trava as alocações exigidas por docs/SPEC.md seção 10
-// (travas de alocação). As medições de referência são feitas sem o
-// detector de corrida; ver docs/TEST-AND-BENCHMARK.md.
+// Este arquivo trava as alocações exigidas por docs/08-casos-de-teste.md,
+// caso 16. As medições de referência são feitas sem o detector de
+// corrida; ver docs/09-testes-e-benchmark.md seção 2.
 
 // TestGenerateZeroAllocations trava a propriedade de "zero alocações" da
 // geração binária. Uma regressão aqui indica que algum caminho quente
